@@ -44,8 +44,11 @@ module vram_display(reset,clk,hcount,vcount,vr_pixel,
    output [7:0] vr_pixel;
    output [18:0] vram_addr;
    input [35:0]  vram_read_data;
-
-   //forecast hcount & vcount 8 clock cycles ahead to get data from ZBT
+		
+	// example
+	// (ADDR 0) 0 (call for addr block 1) | 1 (save read -> latch) | 2  | 3 (latch -> last)
+	// (ADDR 1) 4  (call for addr block 2) | 5 (save read -> latch) | 6 | 7 (latch -> last) 
+   // forecast hcount & vcount 8 clock cycles ahead to get data from ZBT
    wire [10:0] hcount_f = (hcount >= 1048) ? (hcount - 1048) : (hcount + 8);
    wire [9:0] vcount_f = (hcount >= 1048) ? ((vcount == 805) ? 0 : vcount + 1) : vcount;
       

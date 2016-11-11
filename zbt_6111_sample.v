@@ -447,7 +447,7 @@ module zbt_6111_sample(beep, audio_reset_b,
    wire [18:0] 	vram_addr1;
 
    vram_display vd1(reset,clk,hcount,vcount,vr_pixel,
-		    vram_addr1,vram_read_data);
+		    vram_addr1,vram_read_data); //output vr_pixel, vram_addr1
 
    // ADV7185 NTSC decoder interface code
    // adv7185 initialization module
@@ -465,7 +465,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 		       .ycrcb(ycrcb), .f(fvh[2]),
 		       .v(fvh[1]), .h(fvh[0]), .data_valid(dv));
 
-   // code to write NTSC data to video memory
+   // preprocessing temporary threshold module
 	wire [7:0] thresholded;
 	wire [2:0] fvh_thresh;
 	wire dv_thresh;
@@ -473,6 +473,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 				.fvh_out(fvh_thresh),.dv_out(dv_thresh),
 				.din(ycrcb[29:22]),.dout(thresholded));
 
+	// code to write NTSC data to video memory
    wire [18:0] ntsc_addr;
    wire [35:0] ntsc_data;
    wire        ntsc_we;
@@ -489,16 +490,17 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    // mux selecting read/write to memory based on which write-enable is chosen
 
-   wire 	sw_ntsc = ~switch[7];
-   wire 	my_we = sw_ntsc ? (hcount[1:0]==2'd2) : blank;
+   wire 	sw_ntsc = ~switch[7]; // 1 if using ntsc camera, 0 if not
+   wire 	my_we = sw_ntsc ? (hcount[1:0]==2'd2) : blank; // when hcount[1:0]==2 because cycles 0 and 1 are used for vram_display
    wire [18:0] 	write_addr = sw_ntsc ? ntsc_addr : vram_addr2;
    wire [35:0] 	write_data = sw_ntsc ? ntsc_data : vpat;
 
 //   wire 	write_enable = sw_ntsc ? (my_we & ntsc_we) : my_we;
 //   assign 	vram_addr = write_enable ? write_addr : vram_addr1;
 //   assign 	vram_we = write_enable;
-
-   assign 	vram_addr = my_we ? write_addr : vram_addr1;
+	
+	// set zbt params
+   assign 	vram_addr = my_we ? write_addr : vram_addr1; // vram_addr1 is the read address that comes out of vram_display
    assign 	vram_we = my_we;
    assign 	vram_write_data = write_data;
 
