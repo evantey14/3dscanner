@@ -287,18 +287,19 @@ module zbt_6111_sample(beep, audio_reset_b,
    assign ram0_bwe_b = 4'h0; 
 
 /**********/
-
+/*
    assign ram1_data = 36'hZ; 
    assign ram1_address = 19'h0;
-   assign ram1_adv_ld = 1'b0;
    assign ram1_clk = 1'b0;
-   
-   //These values has to be set to 0 like ram0 if ram1 is used.
-   assign ram1_cen_b = 1'b1;
-   assign ram1_ce_b = 1'b1;
-   assign ram1_oe_b = 1'b1;
    assign ram1_we_b = 1'b1;
-   assign ram1_bwe_b = 4'hF;
+   assign ram1_cen_b = 1'b1;
+*/	
+   //These values has to be set to 0 like ram0 if ram1 is used.
+   
+   assign ram1_ce_b = 1'b0;
+   assign ram1_oe_b = 1'b0;
+   assign ram1_adv_ld = 1'b0;
+   assign ram1_bwe_b = 4'h0;
 
    // clock_feedback_out will be assigned by ramclock
    // assign clock_feedback_out = 1'b0;  //2011-Nov-10
@@ -400,7 +401,7 @@ module zbt_6111_sample(beep, audio_reset_b,
    
    ramclock rc(.ref_clock(clock_65mhz), .fpga_clock(clk),
 					.ram0_clock(ram0_clk), 
-					//.ram1_clock(ram1_clk),   //uncomment if ram1 is used
+					.ram1_clock(ram1_clk),   //uncomment if ram1 is used
 					.clock_feedback_in(clock_feedback_in),
 					.clock_feedback_out(clock_feedback_out), .locked(locked));
 
@@ -431,23 +432,33 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    // wire up to ZBT ram
 
-   wire [35:0] vram_write_data;
-   wire [35:0] vram_read_data;
-   wire [18:0] vram_addr;
-   wire        vram_we;
+   wire [35:0] zbt0_write_data, zbt1_write_data;
+   wire [35:0] zbt0_read_data, zbt1_read_data;
+   wire [18:0] zbt0_addr, zbt1_addr;
+   wire        zbt0_we, zbt1_we;
 
    wire ram0_clk_not_used;
-   zbt_6111 zbt1(clk, 1'b1, vram_we, vram_addr,
-		   vram_write_data, vram_read_data,
+   zbt_6111 zbt0(clk, 1'b1, zbt0_we, zbt0_addr,
+		   zbt0_write_data, zbt0_read_data,
 		   ram0_clk_not_used,   //to get good timing, don't connect ram_clk to zbt_6111
 		   ram0_we_b, ram0_address, ram0_data, ram0_cen_b);
-
+	
+	wire ram1_clk_not_used;
+	zbt_6111 zbt1(clk, 1'b1, zbt1_we, zbt1_addr,
+		   zbt1_write_data, zbt1_read_data,
+		   ram1_clk_not_used,   //to get good timing, don't connect ram_clk to zbt_6111
+		   ram1_we_b, ram1_address, ram1_data, ram1_cen_b);
+	
+	wire [18:0] zbtc_read_addr;
+	wire [18:0] zbtc_write_addr;
+	zbt_controller zbtc(clk,hcount,vcount,zbt0_read_data,zbtc_read_addr,zbt1_write_data,zbtc_write_addr);
+	
    // generate pixel value from reading ZBT memory
    wire [7:0] 	vr_pixel;
-   wire [18:0] 	vram_addr1;
+   wire [18:0] 	vram_read_addr;
 
    vram_display vd1(reset,clk,hcount,vcount,vr_pixel,
-		    vram_addr1,vram_read_data); //output vr_pixel, vram_addr1
+		    vram_read_addr,zbt1_read_data); //output vr_pixel, vram_addr1
 
    // ADV7185 NTSC decoder interface code
    // adv7185 initialization module
@@ -491,18 +502,18 @@ module zbt_6111_sample(beep, audio_reset_b,
    // mux selecting read/write to memory based on which write-enable is chosen
 
    wire 	sw_ntsc = ~switch[7]; // 1 if using ntsc camera, 0 if not
-   wire 	my_we = sw_ntsc ? (hcount[1:0]==2'd2) : blank; // when hcount[1:0]==2 because cycles 0 and 1 are used for vram_display
-   wire [18:0] 	write_addr = sw_ntsc ? ntsc_addr : vram_addr2;
+   wire 	my_we0 = sw_ntsc ? (hcount[1:0]==2'd2) : blank; // when hcount[1:0]==2 because cycles 0 and 1 are used for vram_display
+   wire my_we1 = sw_ntsc ? (hcount[1:0]==2'd3) : blank;
+	wire [18:0] 	write_addr = sw_ntsc ? ntsc_addr : vram_addr2;
    wire [35:0] 	write_data = sw_ntsc ? ntsc_data : vpat;
-
-//   wire 	write_enable = sw_ntsc ? (my_we & ntsc_we) : my_we;
-//   assign 	vram_addr = write_enable ? write_addr : vram_addr1;
-//   assign 	vram_we = write_enable;
 	
 	// set zbt params
-   assign 	vram_addr = my_we ? write_addr : vram_addr1; // vram_addr1 is the read address that comes out of vram_display
-   assign 	vram_we = my_we;
-   assign 	vram_write_data = write_data;
+   assign 	zbt0_addr = my_we0 ? write_addr : zbtc_read_addr; // vram_addr1 is the read address that comes out of vram_display
+   assign 	zbt0_we = my_we0;
+   assign 	zbt0_write_data = write_data;
+
+	assign zbt1_addr = my_we1 ? zbtc_write_addr : vram_read_addr;
+	assign zbt1_we = my_we1;
 
    // select output pixel data
 
@@ -530,7 +541,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    // debugging
    
-   assign led = ~{vram_addr[18:13],reset,switch[0]};
+   assign led = ~{zbt0_addr[18:13],reset,switch[0]};
 
    always @(posedge clk)
      // dispdata <= {vram_read_data,9'b0,vram_addr};
