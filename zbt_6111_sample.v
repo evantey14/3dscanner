@@ -431,8 +431,7 @@ module zbt_6111_sample(beep, audio_reset_b,
    wire hsync,vsync,blank;
    xvga xvga1(clk,hcount,vcount,hsync,vsync,blank);
 
-   // wire up to ZBT ram
-
+   // instantiate ZBT RAM
    wire [35:0] zbt0_write_data, zbt1_write_data;
    wire [35:0] zbt0_read_data, zbt1_read_data;
    wire [18:0] zbt0_addr, zbt1_addr;
@@ -450,34 +449,25 @@ module zbt_6111_sample(beep, audio_reset_b,
 		   ram1_clk_not_used,   //to get good timing, don't connect ram_clk to zbt_6111
 		   ram1_we_b, ram1_address, ram1_data, ram1_cen_b);
 	
-	wire [18:0] zbtc_read_addr;
-	wire [18:0] zbtc_write_addr;
-	zbt_controller zbtc(clk,hcount,vcount,zbt0_read_data,zbtc_read_addr,zbt1_write_data,zbtc_write_addr);
-	
-   // generate pixel value from reading ZBT memory
-   wire [7:0] 	vr_pixel;
-   wire [18:0] 	vram_read_addr;
-
-   vram_display vd1(reset,clk,hcount,vcount,vr_pixel,
-		    vram_read_addr,zbt1_read_data); //output vr_pixel, vram_read_addr
-
-   // ADV7185 NTSC decoder interface code
-   // adv7185 initialization module
+   // ADC7185 NTSC decoder initialization module
    adv7185init adv7185(.reset(reset), .clock_27mhz(clock_27mhz), 
 		       .source(1'b0), .tv_in_reset_b(tv_in_reset_b), 
 		       .tv_in_i2c_clock(tv_in_i2c_clock), 
 		       .tv_in_i2c_data(tv_in_i2c_data));
 
-   wire [29:0] ycrcb;	// video data (luminance, chrominance)
-   wire [2:0] fvh;	// sync for field, vertical, horizontal
+   // ntsc data stream decoder
+	// takes tv_in_ycrcb and translates it to ycrcb, fvh, and dv
+	wire [29:0] ycrcb;	// video data (luminance, chrominance)
+	wire [2:0] fvh;	// sync for field, vertical, horizontal
    wire       dv;	// data valid
-   
    ntsc_decode decode (.clk(tv_in_line_clock1), .reset(reset),
 		       .tv_in_ycrcb(tv_in_ycrcb[19:10]), 
 		       .ycrcb(ycrcb), .f(fvh[2]),
 		       .v(fvh[1]), .h(fvh[0]), .data_valid(dv));
 
-   // preprocessing temporary threshold module
+   // temporary thresholding preprocessor
+	// thresholds stream of y values into thresholded
+	// also passes fvh and dv data with corresponding y data
 	wire [7:0] thresholded;
 	wire [2:0] fvh_thresh;
 	wire dv_thresh;
@@ -485,36 +475,48 @@ module zbt_6111_sample(beep, audio_reset_b,
 				.fvh_out(fvh_thresh),.dv_out(dv_thresh),
 				.din(ycrcb[29:22]),.dout(thresholded));
 
-	// code to write NTSC data to video memory
+	// NTSC to ZBT
+	// stores thresholded pixel stream into zbt0
+	// outputs ntsc_addr, ntsc_data, and ntsc_we (which will get assigned to zbt0 parameters)
    wire [18:0] ntsc_addr;
    wire [35:0] ntsc_data;
    wire        ntsc_we;
    ntsc_to_zbt n2z (clk, tv_in_line_clock1, fvh_thresh, dv_thresh, thresholded,
-		    ntsc_addr, ntsc_data, ntsc_we, switch[6]);
+		    ntsc_addr, ntsc_data, ntsc_we, 0);
 
-   // code to write pattern to ZBT memory
-   reg [31:0] 	count;
-   always @(posedge clk) count <= reset ? 0 : count + 1;
-
-   wire [18:0] 	vram_addr2 = count[0+18:0];
-   wire [35:0] 	vpat = ( switch[1] ? {4{count[3+3:3],4'b0}}
-			 : {4{count[3+4:4],4'b0}} );
-
-   // mux selecting read/write to memory based on which write-enable is chosen
-
-   wire 	sw_ntsc = ~switch[7]; // 1 if using ntsc camera, 0 if not
-   wire 	my_we0 = sw_ntsc ? (hcount[1:0]==2'd2) : blank; 
-   wire my_we1 = sw_ntsc ? (hcount[1:0]==2'd3) : blank;
-	wire [18:0] 	write_addr = sw_ntsc ? ntsc_addr : vram_addr2;
-   wire [35:0] 	write_data = sw_ntsc ? ntsc_data : vpat;
+	// 3D Renderer
+	// takes 3D points from ZBT0 and transform them into the monitor
 	
-	// set zbt params
-   assign 	zbt0_addr = my_we0 ? write_addr : zbtc_read_addr; 
-   assign 	zbt0_we = my_we0;
-   assign 	zbt0_write_data = write_data;
+	// ZBT Controller
+	// takes 2D monitor points, writes them to ZBT1
+	wire [18:0] zbtc_read_addr; // address of data we want from ZBT0 (will be moved to 3D renderer or just changed to a counter)
+	wire [18:0] zbtc_write_addr; // ZBT1 address we're writing data to 
+	wire [35:0] zbtc_write_data; // pixel data we're writing into ZBT1
+	zbt_controller zbtc(clk, hcount, vcount, zbt0_read_data, zbtc_read_addr,
+			zbtc_write_data, zbtc_write_addr);
+	
+   // VRAM
+	// reads line from ZBT1 and outputs separated vr_pixel values
+   wire [7:0] 	vr_pixel;
+   wire [18:0] 	vram_read_addr;
+   vram_display vd1(reset,clk,hcount,vcount,vr_pixel,
+		    vram_read_addr,zbt1_read_data); 
 
-	assign zbt1_addr = my_we1 ? zbtc_write_addr : vram_read_addr;
-	assign zbt1_we = my_we1;
+	// Blackout
+	// Set all ZBT1 values to 0 (when there are glitches/floating values)
+	wire blackout = switch[7]; // blackout ZBT1
+	wire blackout_data = 0;
+	reg [18:0] blackout_addr;
+	always @(posedge clk) blackout_addr <= reset ? 0 : blackout_addr + 1;
+
+	// Set ZBT params
+   assign 	zbt0_addr = zbt0_we ? ntsc_addr : zbtc_read_addr; 
+   assign 	zbt0_we = (hcount[1:0]==2'd2); 
+   assign 	zbt0_write_data = ntsc_data;
+
+	assign 	zbt1_addr = blackout ? blackout_addr : (zbt1_we ? zbtc_write_addr : vram_read_addr);
+	assign 	zbt1_we = blackout ? blank : (hcount[1:0]==2'd2);
+	assign 	zbt1_write_data = blackout ? blackout_data : zbtc_write_data;
 
    // select output pixel data
 
@@ -523,10 +525,10 @@ module zbt_6111_sample(beep, audio_reset_b,
    
    always @(posedge clk)
      begin
-	pixel <= switch[0] ? {hcount[8:6],5'b0} : vr_pixel;
-	b <= blank;
-	hs <= hsync;
-	vs <= vsync;
+		pixel <= switch[0] ? {hcount[8:6],5'b0} : vr_pixel;
+		b <= blank;
+		hs <= hsync;
+		vs <= vsync;
      end
 
    // VGA Output.  In order to meet the setup and hold times of the
@@ -542,31 +544,13 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    // debugging
    
-   assign led = ~{zbt0_addr[18:13],reset,switch[0]};
+   assign led = ~{zbt1_addr[18:13],reset,switch[0]};
 
    always @(posedge clk)
      // dispdata <= {vram_read_data,9'b0,vram_addr};
-     dispdata <= {ntsc_data,9'b0,ntsc_addr};
+     dispdata <= {zbt0_addr,9'b0,zbt1_addr};
 
 endmodule
-
-/////////////////////////////////////////////////////////////////////////////
-// parameterized delay line 
-
-module delayN(clk,in,out);
-   input clk;
-   input in;
-   output out;
-
-   parameter NDELAY = 3;
-
-   reg [NDELAY-1:0] shiftreg;
-   wire 	    out = shiftreg[NDELAY-1];
-
-   always @(posedge clk)
-     shiftreg <= {shiftreg[NDELAY-2:0],in};
-
-endmodule // delayN
 
 // temporary thresholding module
 // if data in < 127, set to 0, if > 127, set to 255
