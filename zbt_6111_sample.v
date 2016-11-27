@@ -399,6 +399,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	wire locked;
 	//assign clock_feedback_out = 0; // gph 2011-Nov-10
    
+	// clock for interfacing with RAM
    ramclock rc(.ref_clock(clock_65mhz), .fpga_clock(clk),
 					.ram0_clock(ram0_clk), 
 					.ram1_clock(ram1_clk),   //uncomment if ram1 is used
@@ -458,7 +459,7 @@ module zbt_6111_sample(beep, audio_reset_b,
    wire [18:0] 	vram_read_addr;
 
    vram_display vd1(reset,clk,hcount,vcount,vr_pixel,
-		    vram_read_addr,zbt1_read_data); //output vr_pixel, vram_addr1
+		    vram_read_addr,zbt1_read_data); //output vr_pixel, vram_read_addr
 
    // ADV7185 NTSC decoder interface code
    // adv7185 initialization module
@@ -502,13 +503,13 @@ module zbt_6111_sample(beep, audio_reset_b,
    // mux selecting read/write to memory based on which write-enable is chosen
 
    wire 	sw_ntsc = ~switch[7]; // 1 if using ntsc camera, 0 if not
-   wire 	my_we0 = sw_ntsc ? (hcount[1:0]==2'd2) : blank; // when hcount[1:0]==2 because cycles 0 and 1 are used for vram_display
+   wire 	my_we0 = sw_ntsc ? (hcount[1:0]==2'd2) : blank; 
    wire my_we1 = sw_ntsc ? (hcount[1:0]==2'd3) : blank;
 	wire [18:0] 	write_addr = sw_ntsc ? ntsc_addr : vram_addr2;
    wire [35:0] 	write_data = sw_ntsc ? ntsc_data : vpat;
 	
 	// set zbt params
-   assign 	zbt0_addr = my_we0 ? write_addr : zbtc_read_addr; // vram_addr1 is the read address that comes out of vram_display
+   assign 	zbt0_addr = my_we0 ? write_addr : zbtc_read_addr; 
    assign 	zbt0_we = my_we0;
    assign 	zbt0_write_data = write_data;
 
