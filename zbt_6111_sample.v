@@ -484,6 +484,13 @@ module zbt_6111_sample(beep, audio_reset_b,
    ntsc_to_zbt n2z (clk, tv_in_line_clock1, fvh_thresh, dv_thresh, thresholded,
 		    ntsc_addr, ntsc_data, ntsc_we, 0);
 
+	// Write to ZBT
+	// manually writes values to zbt memory
+	reg [18:0] write_addr = 0;
+	wire [35:0] write_data;
+	wire manual_write = 1;
+	write_to_zbt w2z(.index(write_addr), .value(write_data));
+	
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
 	
@@ -510,9 +517,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 	always @(posedge clk) blackout_addr <= reset ? 0 : blackout_addr + 1;
 
 	// Set ZBT params
-   assign 	zbt0_addr = zbt0_we ? ntsc_addr : zbtc_read_addr; 
+   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr : ntsc_addr) : zbtc_read_addr; 
    assign 	zbt0_we = (hcount[1:0]==2'd2); 
-   assign 	zbt0_write_data = ntsc_data;
+   assign 	zbt0_write_data = manual_write ? write_data : ntsc_data;
 
 	assign 	zbt1_addr = blackout ? blackout_addr : (zbt1_we ? zbtc_write_addr : vram_read_addr);
 	assign 	zbt1_we = blackout ? blank : (hcount[1:0]==2'd2);

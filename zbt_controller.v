@@ -29,10 +29,13 @@ module zbt_controller(
 	 output [18:0] zbtc_read_addr, zbtc_write_addr;
 	 output [35:0] zbt1_write_data;
 	 
-	 parameter x = 11'd400;
-	 parameter y = 10'd500;
+	 reg [35:0] data;
 	 
-	 assign zbtc_write_addr = {y,x[9:2]};
+	 always @(posedge clk)
+		data <= (hcount[1:0]==2'd1) ? zbt0_read_data : data;
+	 
+	 assign zbtc_write_addr = data;
 	 assign zbt1_write_data = 'hFFFF_FFFF_F;
+	 
 	 
 endmodule
