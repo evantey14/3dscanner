@@ -486,10 +486,11 @@ module zbt_6111_sample(beep, audio_reset_b,
 
 	// Write to ZBT
 	// manually writes values to zbt memory
-	reg [18:0] write_addr = 0;
+	reg [3:0] write_addr;
+	always @(posedge clk) write_addr <= write_addr+1;
 	wire [35:0] write_data;
 	wire manual_write = 1;
-	write_to_zbt w2z(.index(write_addr), .value(write_data));
+	write_to_zbt w2z(.index(write_addr[3:2]), .value(write_data));
 	
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor

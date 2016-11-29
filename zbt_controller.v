@@ -30,10 +30,13 @@ module zbt_controller(
 	 output [35:0] zbt1_write_data;
 	 
 	 reg [35:0] data;
+	 reg [3:0] addr;
 	 
-	 always @(posedge clk)
+	 always @(posedge clk) begin
+		addr <= addr + 1;
 		data <= (hcount[1:0]==2'd1) ? zbt0_read_data : data;
-	 
+	 end
+	 assign zbtc_read_addr = addr;
 	 assign zbtc_write_addr = data;
 	 assign zbt1_write_data = 'hFFFF_FFFF_F;
 	 
