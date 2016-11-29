@@ -19,23 +19,24 @@
 //
 //////////////////////////////////////////////////////////////////////////////////
 module zbt_controller(
-    clk,hcount,vcount,zbt0_read_data,
+    clk,hcount,vcount,x,y,
 	 zbtc_write_data,zbtc_write_addr
     );
 	 input clk;
 	 input [10:0] hcount;
 	 input [9:0] 	vcount;
-	 input [35:0] zbt0_read_data;
+	 input [7:0] x;
+	 input [9:0] y;
 	 output [18:0] zbtc_write_addr;
 	 output [35:0] zbtc_write_data;
 	 
-	 reg [35:0] data;
+	 reg [18:0] addr;
 	 
 	 always @(posedge clk) begin
-		data <= (hcount[1:0]==2'd1) ? zbt0_read_data : data;
+		addr <= (hcount[1:0]==2'd1) ? {y,x} : addr;
 	 end
 	 
-	 assign zbtc_write_addr = data;
+	 assign zbtc_write_addr = addr;
 	 assign zbtc_write_data = 'hFFFF_FFFF_F;
 	 
 	 

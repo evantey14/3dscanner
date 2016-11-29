@@ -495,15 +495,16 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
 	wire [18:0] renderer_read_addr;
-	wire [35:0] renderer_output_data;
+	wire [7:0] x;
+	wire [9:0] y;
 	renderer rend(clk, hcount, vcount, 
-			zbt0_read_data, renderer_read_addr, renderer_output_data);
+			zbt0_read_data, renderer_read_addr, x, y);
 	// ZBT Controller
 	// takes 2D monitor points, writes them to ZBT1
 	wire [18:0] zbtc_read_addr; // address of data we want from ZBT0 (will be moved to 3D renderer or just changed to a counter)
 	wire [18:0] zbtc_write_addr; // ZBT1 address we're writing data to 
 	wire [35:0] zbtc_write_data; // pixel data we're writing into ZBT1
-	zbt_controller zbtc(clk, hcount, vcount, renderer_output_data,
+	zbt_controller zbtc(clk, hcount, vcount, x, y,
 			zbtc_write_data, zbtc_write_addr);
 	
    // VRAM

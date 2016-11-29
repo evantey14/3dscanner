@@ -24,7 +24,8 @@ module renderer(
 		input [9:0] vcount,
 		input [35:0] zbt0_read_data,
 		output[18:0] zbt0_read_addr,
-		output[35:0] renderer_output_data
+		output[7:0] x,
+		output [9:0] y
     );
 		reg [35:0] data;
 		reg [3:0] addr;
@@ -33,5 +34,6 @@ module renderer(
 			data <= (hcount[1:0]==2'd1) ? zbt0_read_data : data;
 		end
 		assign zbt0_read_addr = addr;
-		assign renderer_output_data = data;
+		assign x = data[7:0];
+		assign y = data[17:8];
 endmodule
