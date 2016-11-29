@@ -489,7 +489,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	reg [3:0] write_addr;
 	always @(posedge clk) write_addr <= write_addr+1;
 	wire [35:0] write_data;
-	wire manual_write = 1;
+	wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
 	write_to_zbt w2z(.index(write_addr[3:2]), .value(write_data));
 	
 	// 3D Renderer
@@ -507,8 +507,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// reads line from ZBT1 and outputs separated vr_pixel values
    wire [7:0] 	vr_pixel;
    wire [18:0] 	vram_read_addr;
+	wire [35:0] 	vram_read_data = manual_write? zbt1_read_data: zbt0_read_data; // write from camera if not manual
    vram_display vd1(reset,clk,hcount,vcount,vr_pixel,
-		    vram_read_addr,zbt1_read_data); 
+		    vram_read_addr, vram_read_data); 
 
 	// Blackout
 	// Set all ZBT1 values to 0 (when there are glitches/floating values)
@@ -518,7 +519,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	always @(posedge clk) blackout_addr <= reset ? 0 : blackout_addr + 1;
 
 	// Set ZBT params
-   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr : ntsc_addr) : zbtc_read_addr; 
+   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr : ntsc_addr) : (manual_write? zbtc_read_addr : vram_read_addr); 
    assign 	zbt0_we = (hcount[1:0]==2'd2); 
    assign 	zbt0_write_data = manual_write ? write_data : ntsc_data;
 

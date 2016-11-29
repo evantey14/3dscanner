@@ -20,14 +20,14 @@
 //////////////////////////////////////////////////////////////////////////////////
 module zbt_controller(
     clk,hcount,vcount,zbt0_read_data,
-	 zbtc_read_addr,zbt1_write_data,zbtc_write_addr
+	 zbtc_read_addr,zbtc_write_data,zbtc_write_addr
     );
 	 input clk;
 	 input [10:0] hcount;
 	 input [9:0] 	vcount;
 	 input [35:0] zbt0_read_data;
 	 output [18:0] zbtc_read_addr, zbtc_write_addr;
-	 output [35:0] zbt1_write_data;
+	 output [35:0] zbtc_write_data;
 	 
 	 reg [35:0] data;
 	 reg [3:0] addr;
@@ -38,7 +38,7 @@ module zbt_controller(
 	 end
 	 assign zbtc_read_addr = addr;
 	 assign zbtc_write_addr = data;
-	 assign zbt1_write_data = 'hFFFF_FFFF_F;
+	 assign zbtc_write_data = 'hFFFF_FFFF_F;
 	 
 	 
 endmodule
