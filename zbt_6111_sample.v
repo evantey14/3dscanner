@@ -494,13 +494,16 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
-	
+	wire [18:0] renderer_read_addr;
+	wire [35:0] renderer_output_data;
+	renderer rend(clk, hcount, vcount, 
+			zbt0_read_data, renderer_read_addr, renderer_output_data);
 	// ZBT Controller
 	// takes 2D monitor points, writes them to ZBT1
 	wire [18:0] zbtc_read_addr; // address of data we want from ZBT0 (will be moved to 3D renderer or just changed to a counter)
 	wire [18:0] zbtc_write_addr; // ZBT1 address we're writing data to 
 	wire [35:0] zbtc_write_data; // pixel data we're writing into ZBT1
-	zbt_controller zbtc(clk, hcount, vcount, zbt0_read_data, zbtc_read_addr,
+	zbt_controller zbtc(clk, hcount, vcount, renderer_output_data,
 			zbtc_write_data, zbtc_write_addr);
 	
    // VRAM
@@ -519,7 +522,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	always @(posedge clk) blackout_addr <= reset ? 0 : blackout_addr + 1;
 
 	// Set ZBT params
-   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr : ntsc_addr) : (manual_write? zbtc_read_addr : vram_read_addr); 
+   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr : ntsc_addr) : (manual_write? renderer_read_addr : vram_read_addr); 
    assign 	zbt0_we = (hcount[1:0]==2'd2); 
    assign 	zbt0_write_data = manual_write ? write_data : ntsc_data;
 
@@ -557,7 +560,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    always @(posedge clk)
      // dispdata <= {vram_read_data,9'b0,vram_addr};
-     dispdata <= {zbt0_addr,9'b0,zbt1_addr};
+     dispdata <= {zbt1_read_data,9'b0,vr_pixel};
 
 endmodule
 
