@@ -560,7 +560,7 @@ endmodule // delayN
 // if data in < 127, set to 0, if > 127, set to 255
 // pass field, vertical, horizontal, and data_valid values associated with the pixel
 module threshold(clk, fvh_in, dv_in, fvh_out, dv_out, din, dout);
-	input clk; 
+	input clk;
 	input [2:0] fvh_in;
 	input dv_in;
 	output reg [2:0] fvh_out;
