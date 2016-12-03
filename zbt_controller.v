@@ -35,7 +35,7 @@ module zbt_controller(
 	 
 	 always @(posedge clk) begin
 		zbtc_write_addr <= (hcount[1:0]==2'd1) ? {y,x[9:2]} : addr;
-		zbtc_write_data <= pixel;
+		zbtc_write_data <= {4'b0,pixel,pixel,pixel,pixel};
 	 end
 	 
 	 //assign zbtc_write_addr = addr;

@@ -417,6 +417,11 @@ module zbt_6111_sample(beep, audio_reset_b,
    wire reset,user_reset;
    debounce db1(power_on_reset, clk, ~button_enter, user_reset);
    assign reset = user_reset | power_on_reset;
+	
+	// LEFT, RIGHT buttons for virtual camera
+	wire left, right;
+	debounce db2(reset, clk, ~button_left, left);
+	debounce db3(reset, clk, ~button_right, right);
 
    // display module for debugging
 
@@ -490,7 +495,22 @@ module zbt_6111_sample(beep, audio_reset_b,
 	always @(posedge clk) write_addr <= write_addr+1;
 	wire [35:0] write_data;
 	wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
+	
 	write_to_zbt w2z(.index(write_addr[3:2]), .value(write_data));
+	
+	// Virtual Camera
+	// simulate the monitor as a camera
+	// take in user input and convert to a virtual camera offset
+	reg slow_clk;
+	reg [23:0] clk_reg;
+	always @(posedge clk) begin
+		if (clk_reg == 0) slow_clk <= 1;
+		else slow_clk <= 0;
+		clk_reg <= clk_reg + 1;
+	end
+	
+	wire [5:0] camera_offset;
+	virtual_camera vc(slow_clk, left, right, camera_offset);
 	
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
@@ -498,8 +518,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 	wire [9:0] x;
 	wire [9:0] y;
 	wire [7:0] renderer_pixel;
-	renderer rend(clk, hcount, vcount, 
+	renderer rend(clk, hcount, vcount, camera_offset,
 			zbt0_read_data, renderer_read_addr, x, y, renderer_pixel);
+	
 	// ZBT Controller
 	// takes 2D monitor points, writes them to ZBT1
 	wire [18:0] zbtc_read_addr; // address of data we want from ZBT0 (will be moved to 3D renderer or just changed to a counter)
@@ -562,7 +583,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    always @(posedge clk)
      // dispdata <= {vram_read_data,9'b0,vram_addr};
-     dispdata <= {zbt1_read_data,9'b0,vr_pixel};
+     dispdata <= {camera_offset,9'b0,vr_pixel};
 
 endmodule
 
