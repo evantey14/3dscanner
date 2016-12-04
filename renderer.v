@@ -37,7 +37,7 @@ module renderer(
 			data <= (hcount[1:0]==2'd1) ? zbt0_read_data : data;
 		end
 		assign zbt0_read_addr = addr;
-		assign x = data[29:20]+camera_offset;
+		assign x = data[29:20]+{camera_offset,2'b00};
 		assign y = data[19:10];
 		assign z = data[9:0];
 		assign pixel = data[9:2];

@@ -25,8 +25,11 @@ module virtual_camera(
     output reg [5:0] camera_offset
     );
 	initial camera_offset = 0;
+	reg old_left, old_right;
 	always @(posedge clk) begin
-		if (left) camera_offset <= camera_offset + 'd63;
-		else if (right) camera_offset <= camera_offset + 1;
+			if (old_left == 0 && left == 1) camera_offset <= camera_offset + 63;
+			if (old_right == 0 && right == 1) camera_offset <= camera_offset + 1;
+			old_left <= left;
+			old_right <= right;
 	end
 endmodule

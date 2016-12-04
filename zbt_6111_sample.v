@@ -500,17 +500,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
 	// Virtual Camera
 	// simulate the monitor as a camera
-	// take in user input and convert to a virtual camera offset
-	reg slow_clk;
-	reg [23:0] clk_reg;
-	always @(posedge clk) begin
-		if (clk_reg == 0) slow_clk <= 1;
-		else slow_clk <= 0;
-		clk_reg <= clk_reg + 1;
-	end
-	
+	// take in user input and convert to a virtual camera offset	
 	wire [5:0] camera_offset;
-	virtual_camera vc(slow_clk, left, right, camera_offset);
+	virtual_camera vc(clk, left, right, camera_offset);
 	
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
@@ -538,11 +530,29 @@ module zbt_6111_sample(beep, audio_reset_b,
 		    vram_read_addr, vram_read_data); 
 
 	// Blackout
-	// Set all ZBT1 values to 0 (when there are glitches/floating values)
-	wire blackout = switch[7]; // blackout ZBT1
+	// Set all ZBT1 values to 0
+	// Run whenever camera offset changes
+	reg blackout_start; // signals the start of a blackout when camera offset changes
+	reg [5:0] old_camera_offset;
+	always @(posedge clk) begin
+		if (old_camera_offset != camera_offset) blackout_start <= 1;
+		else blackout_start <= 0;
+		old_camera_offset <= camera_offset;
+	end
+	reg blackout; // boolean controller for zbt param decision. 1 during a blackout
 	wire blackout_data = 0;
-	reg [18:0] blackout_addr;
-	always @(posedge clk) blackout_addr <= reset ? 0 : blackout_addr + 1;
+	reg [23:0] blackout_addr;
+	always @(posedge clk) begin
+		if (blackout_start) begin
+			blackout <= 1;
+			blackout_addr <= 0;
+		end
+		else begin
+			if (blackout_addr == 23'hFFFFFF) blackout <= 0;
+			blackout_addr <= blackout_addr + 1;
+		end 	
+	end
+	
 
 	// Set ZBT params
    assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr[3:2] : ntsc_addr) : (manual_write? renderer_read_addr[3:2] : vram_read_addr); 
@@ -583,7 +593,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    always @(posedge clk)
      // dispdata <= {vram_read_data,9'b0,vram_addr};
-     dispdata <= {camera_offset,9'b0,vr_pixel};
+     dispdata <= camera_offset;
 
 endmodule
 
