@@ -316,7 +316,6 @@ module zbt_6111_sample(beep, audio_reset_b,
    // flash_sts is an input
 
    // RS-232 Interface
-   assign rs232_txd = 1'b1;
    assign rs232_rts = 1'b1;
    // rs232_rxd and rs232_cts are inputs
 
@@ -340,7 +339,7 @@ module zbt_6111_sample(beep, audio_reset_b,
    // button_left, button_down, button_up, and switches are inputs
 
    // User I/Os
-   assign user1 = 32'hZ;
+   //assign user1 = 32'hZ;
    assign user2 = 32'hZ;
    assign user3 = 32'hZ;
    assign user4 = 32'hZ;
@@ -366,7 +365,7 @@ module zbt_6111_sample(beep, audio_reset_b,
    assign analyzer4_data = 16'h0;
    assign analyzer4_clock = 1'b1;
 			    
-   ////////////////////////////////////////////////////////////////////////////
+ /*  ////////////////////////////////////////////////////////////////////////////
    // Demonstration of ZBT RAM as video memory
 
    // use FPGA's digital clock manager to produce a
@@ -381,7 +380,8 @@ module zbt_6111_sample(beep, audio_reset_b,
 
 //   wire clk = clock_65mhz;  // gph 2011-Nov-10
 
-/*   ////////////////////////////////////////////////////////////////////////////
+ */
+ ////////////////////////////////////////////////////////////////////////////
    // Demonstration of ZBT RAM as video memory
 
    // use FPGA's digital clock manager to produce a
@@ -394,13 +394,16 @@ module zbt_6111_sample(beep, audio_reset_b,
    // synthesis attribute CLKIN_PERIOD of vclk1 is 37
    BUFG vclk2(.O(clock_40mhz),.I(clock_40mhz_unbuf));
 
-   wire clk = clock_40mhz;
-*/
+ //  wire clk = clock_40mhz;
+
 	wire locked;
 	//assign clock_feedback_out = 0; // gph 2011-Nov-10
+	
+	parameter IMG_WIDTH = 680;
+	parameter IMG_HEIGHT = 480;
    
 	// clock for interfacing with RAM
-   ramclock rc(.ref_clock(clock_65mhz), .fpga_clock(clk),
+   ramclock rc(.ref_clock(clock_40mhz), .fpga_clock(clk),
 					.ram0_clock(ram0_clk), 
 					.ram1_clock(ram1_clk),   //uncomment if ram1 is used
 					.clock_feedback_in(clock_feedback_in),
@@ -465,23 +468,59 @@ module zbt_6111_sample(beep, audio_reset_b,
 		       .ycrcb(ycrcb), .f(fvh[2]),
 		       .v(fvh[1]), .h(fvh[0]), .data_valid(dv));
 
-   // temporary thresholding preprocessor
-	// thresholds stream of y values into thresholded
+
+	// 5x5 Gaussian Blur
+	wire [2:0] fvh_blur;
+	wire dv_blur;
+	wire [7:0] blurred_px;
+	gaussian_line_blur gaussian_blur(.clk(tv_in_line_clock1),.reset(reset),
+										.fvh_in(fvh),.dv_in(dv),
+										.fvh_out(fvh_blur),.dv_out(dv_blur),
+										.px_in(ycrcb[29:22]),.blurred_px(blurred_px));
+										
+	wire [2:0] fvh_blur2;
+	wire dv_blur2;
+	wire [7:0] blurred_px2;
+	gaussian_line_blur gaussian_blur2(.clk(tv_in_line_clock1),.reset(reset),
+										.fvh_in(fvh_blur),.dv_in(dv_blur),
+										.fvh_out(fvh_blur2),.dv_out(dv_blur2),
+										.px_in(blurred_px),.blurred_px(blurred_px2));
+	
+	wire [2:0] fvh_blur3;
+	wire dv_blur3;
+	wire [7:0] blurred_px3;
+	gaussian_line_blur gaussian_blur3(.clk(tv_in_line_clock1),.reset(reset),
+										.fvh_in(fvh_blur2),.dv_in(dv_blur2),
+										.fvh_out(fvh_blur3),.dv_out(dv_blur3),
+										.px_in(blurred_px2),.blurred_px(blurred_px3));
+	
+	
+	
+	// Threshold
 	// also passes fvh and dv data with corresponding y data
-	wire [7:0] thresholded;
+	wire [7:0] thresholded_px;
 	wire [2:0] fvh_thresh;
 	wire dv_thresh;
-	threshold threshold (.clk(tv_in_line_clock1),.fvh_in(fvh),.dv_in(dv),
+	threshold threshold (.clk(tv_in_line_clock1),.fvh_in(fvh_blur3),.dv_in(dv_blur3),
 				.fvh_out(fvh_thresh),.dv_out(dv_thresh),
-				.din(ycrcb[29:22]),.dout(thresholded));
-
+				.din(blurred_px3),.dout(thresholded_px));
+				
+	// Skeletonize
+//	wire [7:0] skeletonized_px;
+//	wire [2:0] fvh_skeleton;
+//	wire dv_skeleton;
+//	skeletonize skeletonize (.clk(tv_in_line_clock1),.reset(reset),
+//										.fvh_in(fvh_thresh),.dv_in(dv_thresh),
+//										.fvh_out(fvh_skeleton),.dv_out(dv_skeleton),
+//										.px_in(thresholded_px),.skeletonized_px(skeletonized_px));
+				
 	// NTSC to ZBT
 	// stores thresholded pixel stream into zbt0
 	// outputs ntsc_addr, ntsc_data, and ntsc_we (which will get assigned to zbt0 parameters)
    wire [18:0] ntsc_addr;
    wire [35:0] ntsc_data;
    wire        ntsc_we;
-   ntsc_to_zbt n2z (clk, tv_in_line_clock1, fvh_thresh, dv_thresh, thresholded,
+   ntsc_to_zbt n2z (clk, tv_in_line_clock1, fvh_thresh, dv_thresh, thresholded_px,//blurred_px3,
 		    ntsc_addr, ntsc_data, ntsc_we, 0);
 
 	// Write to ZBT
@@ -489,7 +528,8 @@ module zbt_6111_sample(beep, audio_reset_b,
 	reg [3:0] write_addr;
 	always @(posedge clk) write_addr <= write_addr+1;
 	wire [35:0] write_data;
-	wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
+	//wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
+	wire manual_write = 0;
 	write_to_zbt w2z(.index(write_addr[3:2]), .value(write_data));
 	
 	// 3D Renderer
@@ -534,7 +574,8 @@ module zbt_6111_sample(beep, audio_reset_b,
    
    always @(posedge clk)
      begin
-		pixel <= switch[0] ? {hcount[8:6],5'b0} : vr_pixel;
+		//pixel <= switch[0] ? {hcount[8:6],5'b0} : vr_pixel;
+		pixel <= vr_pixel;
 		b <= blank;
 		hs <= hsync;
 		vs <= vsync;
@@ -558,24 +599,30 @@ module zbt_6111_sample(beep, audio_reset_b,
    always @(posedge clk)
      // dispdata <= {vram_read_data,9'b0,vram_addr};
      dispdata <= {zbt0_addr,9'b0,zbt1_addr};
+	
+	///// RS232 TRANSMIT
+	reg [18:0] read_addr;
+	wire save_lock;
+//	always @(posedge clk) save_lock <= (reset)? 1 : 0 ;
+	reg send;
+	wire xmit_clk, start_send; //debugging purposes
+	rs232transmit rs232(.clk(clock_27mhz), .reset(reset),
+								.data(switch[7:0]), .send(send),
+								.xmit_data(rs232_txd), .xmit_clk(xmit_clk),
+								.start_send(start_send));
+//	reg [20:0] counter = 0;
+//	wire old_save_lock = 0;
+//	always @(posedge clock_27mhz) begin
+//			if (old_save_lock != save_lock) begin
+//				read_addr <= 0;
+//			end
+//			else if (save_lock) begin
+//				//data <= 
+//			end
+//			old_save_lock <= save_lock;
+//			if (counter == 0) send <= 1;
+//			else send <= 0;
+//			counter <= counter + 1;
+//	end
 
 endmodule
-
-// temporary thresholding module
-// if data in < 127, set to 0, if > 127, set to 255
-// pass field, vertical, horizontal, and data_valid values associated with the pixel
-module threshold(clk, fvh_in, dv_in, fvh_out, dv_out, din, dout);
-	input clk;
-	input [2:0] fvh_in;
-	input dv_in;
-	output reg [2:0] fvh_out;
-	output reg dv_out; 
-	input [7:0] din; 
-	output reg [7:0] dout; 
-	always @(posedge clk) begin
-		dout <= (din > 8'b0111_1111) ? 8'b1111_1111 : 8'b0000_0000;
-		fvh_out <= fvh_in;
-		dv_out <= dv_in;
-	end
-endmodule
-
