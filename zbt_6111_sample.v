@@ -316,7 +316,7 @@ module zbt_6111_sample(beep, audio_reset_b,
    // flash_sts is an input
 
    // RS-232 Interface
-   assign rs232_txd = 1'b1;
+   //assign rs232_txd = 1'b1;
    assign rs232_rts = 1'b1;
    // rs232_rxd and rs232_cts are inputs
 
@@ -422,6 +422,10 @@ module zbt_6111_sample(beep, audio_reset_b,
 	wire left, right;
 	debounce db2(reset, clk, ~button_left, left);
 	debounce db3(reset, clk, ~button_right, right);
+
+	// BUTTON0 for saving frames / sending to PC
+	wire save;
+	debounce db4(reset, clk, ~button0, save);
 
    // display module for debugging
 
@@ -553,10 +557,93 @@ module zbt_6111_sample(beep, audio_reset_b,
 		end 	
 	end
 	
+	// RS232 transmit image to PC
+	// when user presses button0, lock the frame in ZBT0
+	reg frame_lock = 0;
+	reg old_frame_lock = 0;
+	always @(posedge clk) frame_lock <= reset ? 0 : (frame_lock==0 && save==1) ? 1 : frame_lock;
+	reg [18:0] rs232_addr = 0;
+	reg [7:0] rs_232_px;
+	reg [35:0] rs_232_data;
+	
+	
+	reg [1:0] px_state = 0;	
+	parameter S_READ = 0;
+	parameter S_SEND = 1;
+	reg read_state = S_READ;
+	
+	reg send;
+	reg [11:0] counter;
+	
+	always @(posedge clock_27mhz) begin
+		old_frame_lock <= frame_lock;
+		case (read_state)
+			S_READ:
+				begin
+					if (frame_lock) begin 
+						if (rs232_addr != 18'hFFFFF) begin
+							rs232_addr <= rs232_addr + 1;
+							read_state <= S_SEND;
+							counter <= 0;
+						end
+					end
+				end
+			S_SEND:
+				begin
+					case (px_state) 
+						0: 
+							begin
+								rs_232_px <= zbt0_read_data[4*8-1-:8];
+								if (counter == 0) send <= 1;
+								else if (counter == 11'hFFFFF) px_state <= 1;
+								else send <= 0;
+								counter <= counter + 1;
+							end
+						1:
+							begin
+								rs_232_px <= zbt0_read_data[3*8-1-:8];
+								if (counter == 0) send <= 1;
+								else if (counter == 11'hFFFFF) px_state <= 2;
+								else send <= 0;
+								counter <= counter + 1;
+							end
+						2:
+							begin
+								rs_232_px <= zbt0_read_data[2*8-1-:8];
+								if (counter == 0) send <= 1;
+								else if (counter == 11'hFFFFF) px_state <= 3;
+								else send <= 0;
+								counter <= counter + 1;
+							end
+						3:
+							begin
+								rs_232_px <= zbt0_read_data[1*8-1-:8];
+								if (counter == 0) send <= 1;
+								else if (counter == 11'hFFFFF) begin
+									px_state <= 0;
+									read_state <= S_READ;
+								end
+								else send <= 0;
+								counter <= counter + 1;
+							end
+					endcase
+				end
+		endcase
+		
+	end
+	reg send_test = 0;
+	reg [11:0] acounter = 0;
+	always @(posedge clock_27mhz) begin
+		if (acounter == 0) send_test<=1;
+		else send_test <= 0;
+		acounter <= acounter + 1;
+		
+	end
+	rs232transmit sendx(clock_27mhz, 0, rs_232_px, send, rs232_txd, xmit_clk, start_send);
 
 	// Set ZBT params
-   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr[3:2] : ntsc_addr) : (manual_write? renderer_read_addr[3:2] : vram_read_addr); 
-   assign 	zbt0_we = (hcount[1:0]==2'd2); 
+   assign 	zbt0_addr = frame_lock? rs232_addr : zbt0_we ? (manual_write? write_addr[3:2] : ntsc_addr) : (manual_write? renderer_read_addr[3:2] : vram_read_addr); 
+   assign 	zbt0_we = frame_lock? 0 : (hcount[1:0]==2'd2); 
    assign 	zbt0_write_data = manual_write ? write_data : ntsc_data;
 
 	assign 	zbt1_addr = blackout ? blackout_addr : (zbt1_we ? zbtc_write_addr : vram_read_addr);
@@ -593,7 +680,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    always @(posedge clk)
      // dispdata <= {vram_read_data,9'b0,vram_addr};
-     dispdata <= camera_offset;
+     dispdata <= {read_state,2'b0,px_state,3'b0,frame_lock};
 
 endmodule
 
