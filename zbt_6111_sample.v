@@ -420,6 +420,11 @@ module zbt_6111_sample(beep, audio_reset_b,
    wire reset,user_reset;
    debounce db1(power_on_reset, clk, ~button_enter, user_reset);
    assign reset = user_reset | power_on_reset;
+	
+	// LEFT, RIGHT buttons for virtual camera
+	wire left, right;
+	debounce db2(reset, clk, ~button_left, left);
+	debounce db3(reset, clk, ~button_right, right);
 
    // display module for debugging
 
@@ -528,19 +533,30 @@ module zbt_6111_sample(beep, audio_reset_b,
 	reg [3:0] write_addr;
 	always @(posedge clk) write_addr <= write_addr+1;
 	wire [35:0] write_data;
-	//wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
-	wire manual_write = 0;
+	wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
 	write_to_zbt w2z(.index(write_addr[3:2]), .value(write_data));
+	
+	// Virtual Camera
+	// simulate the monitor as a camera
+	// take in user input and convert to a virtual camera offset	
+	wire [5:0] camera_offset;
+	virtual_camera vc(clk, left, right, camera_offset);
 	
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
+	wire [18:0] renderer_read_addr;
+	wire [9:0] x;
+	wire [9:0] y;
+	wire [7:0] renderer_pixel;
+	renderer rend(clk, hcount, vcount, camera_offset,
+			zbt0_read_data, renderer_read_addr, x, y, renderer_pixel);
 	
 	// ZBT Controller
 	// takes 2D monitor points, writes them to ZBT1
 	wire [18:0] zbtc_read_addr; // address of data we want from ZBT0 (will be moved to 3D renderer or just changed to a counter)
 	wire [18:0] zbtc_write_addr; // ZBT1 address we're writing data to 
 	wire [35:0] zbtc_write_data; // pixel data we're writing into ZBT1
-	zbt_controller zbtc(clk, hcount, vcount, zbt0_read_data, zbtc_read_addr,
+	zbt_controller zbtc(clk, hcount, vcount, x, y, renderer_pixel,
 			zbtc_write_data, zbtc_write_addr);
 	
    // VRAM
@@ -552,14 +568,32 @@ module zbt_6111_sample(beep, audio_reset_b,
 		    vram_read_addr, vram_read_data); 
 
 	// Blackout
-	// Set all ZBT1 values to 0 (when there are glitches/floating values)
-	wire blackout = switch[7]; // blackout ZBT1
+	// Set all ZBT1 values to 0
+	// Run whenever camera offset changes
+	reg blackout_start; // signals the start of a blackout when camera offset changes
+	reg [5:0] old_camera_offset;
+	always @(posedge clk) begin
+		if (old_camera_offset != camera_offset) blackout_start <= 1;
+		else blackout_start <= 0;
+		old_camera_offset <= camera_offset;
+	end
+	reg blackout; // boolean controller for zbt param decision. 1 during a blackout
 	wire blackout_data = 0;
-	reg [18:0] blackout_addr;
-	always @(posedge clk) blackout_addr <= reset ? 0 : blackout_addr + 1;
+	reg [23:0] blackout_addr;
+	always @(posedge clk) begin
+		if (blackout_start) begin
+			blackout <= 1;
+			blackout_addr <= 0;
+		end
+		else begin
+			if (blackout_addr == 23'hFFFFFF) blackout <= 0;
+			blackout_addr <= blackout_addr + 1;
+		end 	
+	end
+	
 
 	// Set ZBT params
-   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr : ntsc_addr) : (manual_write? zbtc_read_addr : vram_read_addr); 
+   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr[3:2] : ntsc_addr) : (manual_write? renderer_read_addr[3:2] : vram_read_addr); 
    assign 	zbt0_we = (hcount[1:0]==2'd2); 
    assign 	zbt0_write_data = manual_write ? write_data : ntsc_data;
 
@@ -598,31 +632,6 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    always @(posedge clk)
      // dispdata <= {vram_read_data,9'b0,vram_addr};
-     dispdata <= {zbt0_addr,9'b0,zbt1_addr};
-	
-	///// RS232 TRANSMIT
-	reg [18:0] read_addr;
-	wire save_lock;
-//	always @(posedge clk) save_lock <= (reset)? 1 : 0 ;
-	reg send;
-	wire xmit_clk, start_send; //debugging purposes
-	rs232transmit rs232(.clk(clock_27mhz), .reset(reset),
-								.data(switch[7:0]), .send(send),
-								.xmit_data(rs232_txd), .xmit_clk(xmit_clk),
-								.start_send(start_send));
-//	reg [20:0] counter = 0;
-//	wire old_save_lock = 0;
-//	always @(posedge clock_27mhz) begin
-//			if (old_save_lock != save_lock) begin
-//				read_addr <= 0;
-//			end
-//			else if (save_lock) begin
-//				//data <= 
-//			end
-//			old_save_lock <= save_lock;
-//			if (counter == 0) send <= 1;
-//			else send <= 0;
-//			counter <= counter + 1;
-//	end
+     dispdata <= camera_offset;
 
 endmodule
