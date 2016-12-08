@@ -22,6 +22,6 @@ module write_to_zbt(
 		output [18:0] write_addr,
 		output [35:0] write_data
     );
-	assign write_addr = 0;
+	assign write_addr = 5;
 	assign write_data = {6'b0,10'd100,10'd100,10'b1111_1111_00};
 endmodule

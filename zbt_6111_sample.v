@@ -546,7 +546,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	wire manual_we = switch[6]; // if 1, write directly into ZBT0, else use camera
 	manual_write_to_zbt mw2z(clk, manual_write_addr, manual_write_data);
 	
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////// ABOVE: storing into ZBT0 //////////////// BELOW: storing into ZBT1 ////////////////
 	
 	// Virtual Camera
 	// simulate the monitor as a camera
@@ -576,7 +576,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// reads line from ZBT1 and outputs separated vr_pixel values
    wire [7:0] 	vr_pixel;
    wire [18:0] 	vram_read_addr;
-	wire [35:0] 	vram_read_data = manual_we? zbt1_read_data: zbt0_read_data; // write from camera if not manual
+	wire [35:0] 	vram_read_data = we||manual_we? zbt1_read_data: zbt0_read_data; // write from camera if not manual
    vram_display vd1(reset,clk,hcount,vcount,vr_pixel,
 		    vram_read_addr, vram_read_data); 
 
@@ -606,10 +606,10 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
 
 	// Set ZBT params
-   assign 	zbt0_addr = zbt0_we ? (manual_we? manual_write_addr[3:2] : ntsc_addr) : (manual_we? renderer_read_addr[3:2] : vram_read_addr); 
+   assign 	zbt0_addr = zbt0_we ? (we ? write_addr : manual_we? manual_write_addr[3:2] : ntsc_addr) : (we ? 5 : manual_we ? renderer_read_addr[3:2] : vram_read_addr); 
    assign 	zbt0_we = hcount[1:0] == 2'd2;//manual_write? (skeletonize_we && (hcount[1:0]==2'd2)) : hcount[1:0]==2'd2;
-   assign 	zbt0_write_data = manual_we ? manual_write_data : ntsc_data;
-
+   assign 	zbt0_write_data = we ? write_data : manual_we ? manual_write_data : ntsc_data;
+	
 	assign 	zbt1_addr = blackout ? blackout_addr : (zbt1_we ? zbtc_write_addr : (hcount[1:0]==2'd0 ? zbtc_read_addr : vram_read_addr));
 	assign 	zbt1_we = blackout ? blank : (hcount[1:0]==2'd2);
 	assign 	zbt1_write_data = blackout ? blackout_data : zbtc_write_data;
