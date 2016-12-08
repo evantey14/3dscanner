@@ -18,12 +18,13 @@
 // Additional Comments: 
 //
 //////////////////////////////////////////////////////////////////////////////////
-module skeletonize(clk, reset, fvh_in, dv_in, px_in, current_row, midpoint);
+module skeletonize(clk, reset, fvh_in, dv_in, px_in, current_row, midpoint, row_done);
    input wire clk, reset, dv_in;
 	input wire [2:0] fvh_in;
 	input wire [7:0] px_in;
-	output reg [8:0] current_row;
-	output reg [9:0] midpoint;
+	output reg [10:0] current_row;
+	output reg [10:0] midpoint;
+	output reg row_done;
 	
 	parameter S_WHITE_BLOCK = 2'b00;
 	parameter S_WHITE_NOISE = 2'b01;
@@ -47,10 +48,12 @@ module skeletonize(clk, reset, fvh_in, dv_in, px_in, current_row, midpoint);
 	reg [2:0] noise_counter;
 	assign new_frame = ~last_fvh[1] && fvh_in[1];
 	assign new_line = ~last_fvh[0] && fvh_in[0];
+	
 	reg first_row;
 	always @(posedge clk) begin
 		last_fvh[2:0] <= fvh_in;
 		last_state <= state;
+		if (row_done) row_done <= 0;
 		// See whether this is first row to output current_row properly
 		if(reset || new_frame) first_row <= 1;
 		if(new_line && first_row) first_row <= 0; 
@@ -73,6 +76,7 @@ module skeletonize(clk, reset, fvh_in, dv_in, px_in, current_row, midpoint);
 									((current_end_idx + current_start_idx) >> 1) : ((current_end_idx + current_start_idx + 1) >> 1);
 				end
 				else midpoint <= max_idx;
+				row_done <= 1;
 			end
 		end
 		else begin

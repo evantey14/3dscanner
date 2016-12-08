@@ -317,6 +317,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    // RS-232 Interface
    assign rs232_rts = 1'b1;
+	assign rs232_txd = 1'b1;
    // rs232_rxd and rs232_cts are inputs
 
    // PS/2 Ports
@@ -427,7 +428,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	debounce db3(reset, clk, ~button_right, right);
 
    // display module for debugging
-
+	
    reg [63:0] dispdata;
    display_16hex hexdisp1(reset, clk, dispdata,
 			  disp_blank, disp_clock, disp_rs, disp_ce_b,
@@ -472,8 +473,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 		       .tv_in_ycrcb(tv_in_ycrcb[19:10]), 
 		       .ycrcb(ycrcb), .f(fvh[2]),
 		       .v(fvh[1]), .h(fvh[0]), .data_valid(dv));
-
-
+	
 	// 5x5 Gaussian Blur
 	wire [2:0] fvh_blur;
 	wire dv_blur;
@@ -509,32 +509,45 @@ module zbt_6111_sample(beep, audio_reset_b,
 	threshold threshold (.clk(tv_in_line_clock1),.fvh_in(fvh_blur3),.dv_in(dv_blur3),
 				.fvh_out(fvh_thresh),.dv_out(dv_thresh),
 				.din(blurred_px3),.dout(thresholded_px));
-				
+	
+	
 	// Skeletonize
-//	wire [7:0] skeletonized_px;
-//	wire [2:0] fvh_skeleton;
-//	wire dv_skeleton;
-//	skeletonize skeletonize (.clk(tv_in_line_clock1),.reset(reset),
-//										.fvh_in(fvh_thresh),.dv_in(dv_thresh),
-//										.fvh_out(fvh_skeleton),.dv_out(dv_skeleton),
-//										.px_in(thresholded_px),.skeletonized_px(skeletonized_px));
-				
+	wire [10:0] current_row;
+	wire [10:0] midpoint;
+	wire row_done;
+	skeletonize skeletonize (.clk(tv_in_line_clock1),.reset(reset),
+										.fvh_in(fvh_thresh),.dv_in(dv_thresh),
+										.px_in(thresholded_px),.current_row(current_row),
+										.midpoint(midpoint),.row_done(row_done));
+	reg skeletonize_we = 0;
+	reg [2:0] skeletonize_we_counter = 0;
+	always @(posedge clk) begin
+		if(row_done) begin 
+			skeletonize_we <= 1;
+			skeletonize_we_counter <= 0;
+		end
+		else if (skeletonize_we_counter == 3'hF) begin
+			skeletonize_we <= 0;
+		end
+		else skeletonize_we_counter <= skeletonize_we_counter + 1;
+	end
+	assign write_data = {6'b0,current_row,midpoint,10'b1111_1111_00};
 	// NTSC to ZBT
 	// stores thresholded pixel stream into zbt0
 	// outputs ntsc_addr, ntsc_data, and ntsc_we (which will get assigned to zbt0 parameters)
    wire [18:0] ntsc_addr;
    wire [35:0] ntsc_data;
    wire        ntsc_we;
-   ntsc_to_zbt n2z (clk, tv_in_line_clock1, fvh_thresh, dv_thresh, thresholded_px,//blurred_px3,
+   ntsc_to_zbt n2z (clk, tv_in_line_clock1, fvh_thresh, dv_thresh, thresholded_px,
 		    ntsc_addr, ntsc_data, ntsc_we, 0);
 
 	// Write to ZBT
 	// manually writes values to zbt memory
-	reg [3:0] write_addr;
+	reg [18:0] write_addr;
 	always @(posedge clk) write_addr <= write_addr+1;
-	wire [35:0] write_data;
+	//wire [35:0] write_data;
 	wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
-	write_to_zbt w2z(.index(write_addr[3:2]), .value(write_data));
+	//write_to_zbt w2z(.index(write_addr[3:2]), .value(write_data));
 	
 	// Virtual Camera
 	// simulate the monitor as a camera
@@ -593,8 +606,8 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
 
 	// Set ZBT params
-   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr[3:2] : ntsc_addr) : (manual_write? renderer_read_addr[3:2] : vram_read_addr); 
-   assign 	zbt0_we = (hcount[1:0]==2'd2); 
+   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr[18:2] : ntsc_addr) : (manual_write? renderer_read_addr[18:2] : vram_read_addr); 
+   assign 	zbt0_we = manual_write? (skeletonize_we && (hcount[1:0]==2'd2)) : hcount[1:0]==2'd2;
    assign 	zbt0_write_data = manual_write ? write_data : ntsc_data;
 
 	assign 	zbt1_addr = blackout ? blackout_addr : (zbt1_we ? zbtc_write_addr : vram_read_addr);
@@ -629,9 +642,19 @@ module zbt_6111_sample(beep, audio_reset_b,
    // debugging
    
    assign led = ~{zbt1_addr[18:13],reset,switch[0]};
-
-   always @(posedge clk)
+	
+   //always @(posedge clk)
      // dispdata <= {vram_read_data,9'b0,vram_addr};
-     dispdata <= camera_offset;
-
+    // dispdata <= camera_offset;
+	reg [2:0] last_fvh;
+	reg [10:0] counter;
+	assign new_line = ~last_fvh[0] && fvh[0];
+	always @(posedge tv_in_line_clock1) begin
+		last_fvh[2:0] <= fvh[2:0];
+		if(new_line) begin
+			dispdata <= counter;
+			counter <= 0;
+		end
+		else counter <= counter + 1;
+	end
 endmodule

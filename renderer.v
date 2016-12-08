@@ -31,7 +31,7 @@ module renderer(
     );
 		reg [35:0] data;
 		wire [9:0] z;
-		reg [3:0] addr;
+		reg [18:0] addr;
 		always @(posedge clk) begin
 			addr <= addr + 1;
 			data <= (hcount[1:0]==2'd1) ? zbt0_read_data : data;

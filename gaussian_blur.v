@@ -18,7 +18,7 @@
 // Additional Comments: 
 //
 //////////////////////////////////////////////////////////////////////////////////
-module gaussian_blur #(parameter FILTER_SIZE=25, IMG_WIDTH=859)
+module gaussian_blur #(parameter FILTER_SIZE=25, IMG_WIDTH=720)
 		(clk,reset,fvh_in,dv_in,fvh_out,dv_out,px_in,blurred_px);
 	 
 	input wire clk,reset, dv_in;
@@ -30,17 +30,17 @@ module gaussian_blur #(parameter FILTER_SIZE=25, IMG_WIDTH=859)
 	
 	parameter FILTER_WIDTH = 5;
 	parameter PX_DELAY = 2*IMG_WIDTH+2; //# clock cycles bw receiving a px and calculating the blurred version of it
-//	parameter [FILTER_SIZE*6-1:0] COEFFS = {6'd24,6'd35,6'd39,6'd35,6'd24,
-//																6'd35,6'd50,6'd57,6'd50,6'd35,
-//																6'd39,6'd57,6'd63,6'd57,6'd39,
-//																6'd35,6'd50,6'd57,6'd50,6'd35,
-//																6'd24,6'd35,6'd39,6'd35,6'd24};
-//	
-	parameter [FILTER_SIZE*6-1:0] COEFFS = {6'd0,6'd0,6'd0,6'd0,6'd0,
-																6'd0,6'd0,6'd0,6'd0,6'd0,
-																6'd51,6'd51,6'd51,6'd51,6'd51,
-																6'd0,6'd0,6'd0,6'd0,6'd0,
-																6'd0,6'd0,6'd0,6'd0,6'd0};
+	parameter [FILTER_SIZE*6-1:0] COEFFS = {6'd24,6'd35,6'd39,6'd35,6'd24,
+																6'd35,6'd50,6'd57,6'd50,6'd35,
+																6'd39,6'd57,6'd63,6'd57,6'd39,
+																6'd35,6'd50,6'd57,6'd50,6'd35,
+																6'd24,6'd35,6'd39,6'd35,6'd24};
+	
+	//parameter [FILTER_SIZE*6-1:0] COEFFS = {6'd0,6'd0,6'd0,6'd0,6'd0,
+	//															6'd0,6'd0,6'd0,6'd0,6'd0,
+	//															6'd51,6'd51,6'd51,6'd51,6'd51,
+	//															6'd0,6'd0,6'd0,6'd0,6'd0,
+	//															6'd0,6'd0,6'd0,6'd0,6'd0};
 	reg [7:0] filter [0:24]; // top left to bottom right
 	reg [7:0] line_buffer1 [0:IMG_WIDTH-FILTER_WIDTH-1];
 	reg [7:0] line_buffer2 [0:IMG_WIDTH-FILTER_WIDTH-1];
