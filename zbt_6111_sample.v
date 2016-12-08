@@ -423,9 +423,11 @@ module zbt_6111_sample(beep, audio_reset_b,
    assign reset = user_reset | power_on_reset;
 	
 	// LEFT, RIGHT buttons for virtual camera
-	wire left, right;
+	wire left, right, up, down;
 	debounce db2(reset, clk, ~button_left, left);
 	debounce db3(reset, clk, ~button_right, right);
+	debounce db4(reset, clk, ~button_up, up);
+	debounce db5(reset, clk, ~button_down, down);
 
    // display module for debugging
 	
@@ -531,17 +533,17 @@ module zbt_6111_sample(beep, audio_reset_b,
 
 	// Write to ZBT
 	// manually writes values to zbt memory
-	reg [4:0] write_addr;
+	reg [8+2:0] write_addr;
 	always @(posedge clk) write_addr <= write_addr+1;
 	wire [35:0] write_data;
 	wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
-	write_to_zbt w2z(.index(write_addr[4:2]), .value(write_data));
+	write_to_zbt w2z(.index(write_addr[8+2:2]), .value(write_data));
 	
 	// Virtual Camera
 	// simulate the monitor as a camera
 	// take in user input and convert to a virtual camera offset	
-	wire [5:0] camera_offset;
-	virtual_camera vc(clk, left, right, camera_offset);
+	wire [10:0] x_offset, y_offset;
+	virtual_camera vc(clk, left, right, up, down, x_offset, y_offset);
 	
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
@@ -549,7 +551,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	wire [9:0] x;
 	wire [9:0] y;
 	wire [7:0] renderer_pixel;
-	renderer rend(clk, hcount, vcount, camera_offset,
+	renderer rend(clk, hcount, vcount, x_offset, y_offset,
 			zbt0_read_data, renderer_read_addr, x, y, renderer_pixel);
 	
 	// ZBT Controller
@@ -573,11 +575,12 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// Set all ZBT1 values to 0
 	// Run whenever camera offset changes
 	reg blackout_start; // signals the start of a blackout when camera offset changes
-	reg [5:0] old_camera_offset;
+	reg [10:0] old_x_offset, old_y_offset;
 	always @(posedge clk) begin
-		if (old_camera_offset != camera_offset) blackout_start <= 1;
+		if (old_x_offset != x_offset || old_y_offset != y_offset) blackout_start <= 1;
 		else blackout_start <= 0;
-		old_camera_offset <= camera_offset;
+		old_x_offset <= x_offset;
+		old_y_offset <= y_offset;
 	end
 	reg blackout; // boolean controller for zbt param decision. 1 during a blackout
 	wire blackout_data = 0;
@@ -595,7 +598,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
 
 	// Set ZBT params
-   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr[3:2] : ntsc_addr) : (manual_write? renderer_read_addr[3:2] : vram_read_addr); 
+   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr[8+2:2] : ntsc_addr) : (manual_write? renderer_read_addr[8+2:2] : vram_read_addr); 
    assign 	zbt0_we = hcount[1:0] == 2'd2;//manual_write? (skeletonize_we && (hcount[1:0]==2'd2)) : hcount[1:0]==2'd2;
    assign 	zbt0_write_data = manual_write ? write_data : ntsc_data;
 

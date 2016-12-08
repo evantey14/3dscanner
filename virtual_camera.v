@@ -22,14 +22,22 @@ module virtual_camera(
     input clk,
     input left,
     input right,
-    output reg [5:0] camera_offset
+	 input up,
+	 input down,
+    output reg [10:0] x_offset,
+	 output reg [10:0] y_offset
     );
-	initial camera_offset = 0;
-	reg old_left, old_right;
+	initial x_offset = 300;
+	initial y_offset = 300;
+	reg old_left, old_right, old_up, old_down;
 	always @(posedge clk) begin
-			if (old_left == 0 && left == 1) camera_offset <= camera_offset + 63;
-			if (old_right == 0 && right == 1) camera_offset <= camera_offset + 1;
+			if (old_left == 0 && left == 1) x_offset <= x_offset + -10'd1;
+			if (old_right == 0 && right == 1) x_offset <= x_offset + 1;
+			if (old_up == 0 && up == 1) y_offset <= y_offset + -10'd1;
+			if (old_down == 0 && down == 1) y_offset <= y_offset + 1;
 			old_left <= left;
 			old_right <= right;
+			old_up <= up;
+			old_down <= down;
 	end
 endmodule
