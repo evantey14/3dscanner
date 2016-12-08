@@ -18,7 +18,7 @@
 // Additional Comments: 
 //
 //////////////////////////////////////////////////////////////////////////////////
-module write_to_zbt(
+module manual_write_to_zbt(
 	input wire [2:0] index,
 	output reg [35:0] value
     );

@@ -531,11 +531,11 @@ module zbt_6111_sample(beep, audio_reset_b,
 
 	// Write to ZBT
 	// manually writes values to zbt memory
-	reg [4:0] write_addr;
-	always @(posedge clk) write_addr <= write_addr+1;
-	wire [35:0] write_data;
-	wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
-	write_to_zbt w2z(.index(write_addr[4:2]), .value(write_data));
+	reg [4:0] manual_write_addr;
+	always @(posedge clk) manual_write_addr <= manual_write_addr+1;
+	wire [35:0] manual_write_data;
+	wire manual_we = switch[6]; // if 1, write directly into ZBT0, else use camera
+	manual_write_to_zbt w2z(.index(manual_write_addr[4:2]), .value(manual_write_data));
 	
 	// Virtual Camera
 	// simulate the monitor as a camera
@@ -565,7 +565,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// reads line from ZBT1 and outputs separated vr_pixel values
    wire [7:0] 	vr_pixel;
    wire [18:0] 	vram_read_addr;
-	wire [35:0] 	vram_read_data = manual_write? zbt1_read_data: zbt0_read_data; // write from camera if not manual
+	wire [35:0] 	vram_read_data = manual_we? zbt1_read_data: zbt0_read_data; // write from camera if not manual
    vram_display vd1(reset,clk,hcount,vcount,vr_pixel,
 		    vram_read_addr, vram_read_data); 
 
@@ -595,9 +595,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
 
 	// Set ZBT params
-   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr[3:2] : ntsc_addr) : (manual_write? renderer_read_addr[3:2] : vram_read_addr); 
+   assign 	zbt0_addr = zbt0_we ? (manual_we? manual_write_addr[3:2] : ntsc_addr) : (manual_we? renderer_read_addr[3:2] : vram_read_addr); 
    assign 	zbt0_we = hcount[1:0] == 2'd2;//manual_write? (skeletonize_we && (hcount[1:0]==2'd2)) : hcount[1:0]==2'd2;
-   assign 	zbt0_write_data = manual_write ? write_data : ntsc_data;
+   assign 	zbt0_write_data = manual_we ? manual_write_data : ntsc_data;
 
 	assign 	zbt1_addr = blackout ? blackout_addr : (zbt1_we ? zbtc_write_addr : (hcount[1:0]==2'd0 ? zbtc_read_addr : vram_read_addr));
 	assign 	zbt1_we = blackout ? blank : (hcount[1:0]==2'd2);
