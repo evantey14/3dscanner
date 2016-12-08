@@ -464,8 +464,8 @@ module zbt_6111_sample(beep, audio_reset_b,
 		       .tv_in_i2c_clock(tv_in_i2c_clock), 
 		       .tv_in_i2c_data(tv_in_i2c_data));
 
-   // ntsc data stream decoder
-	// takes tv_in_ycrcb and translates it to ycrcb, fvh, and dv
+   // NTSC data stream decoder
+	// takes tv_in_ycrcb and translates it to ycrcb, fvh, and dv per pixel
 	wire [29:0] ycrcb;	// video data (luminance, chrominance)
 	wire [2:0] fvh;	// sync for field, vertical, horizontal
    wire       dv;	// data valid
@@ -474,7 +474,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 		       .ycrcb(ycrcb), .f(fvh[2]),
 		       .v(fvh[1]), .h(fvh[0]), .data_valid(dv));
 	
-	// 5x5 Gaussian Blur
+	// Gaussian Blur
+	// Pass pixels through 3 Gaussian line blurs to decrease noise
+	
 	wire [2:0] fvh_blur;
 	wire dv_blur;
 	wire [7:0] blurred_px;
@@ -482,7 +484,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 										.fvh_in(fvh),.dv_in(dv),
 										.fvh_out(fvh_blur),.dv_out(dv_blur),
 										.px_in(ycrcb[29:22]),.blurred_px(blurred_px));
-										
+									
 	wire [2:0] fvh_blur2;
 	wire dv_blur2;
 	wire [7:0] blurred_px2;
@@ -499,10 +501,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 										.fvh_out(fvh_blur3),.dv_out(dv_blur3),
 										.px_in(blurred_px2),.blurred_px(blurred_px3));
 	
-	
-	
 	// Threshold
-	// also passes fvh and dv data with corresponding y data
+	// Floor / Ceiling pixel grayscale values to indicate lack / presence of laser line
+	// passes fvh and dv with the associated pixels (for display)
 	wire [7:0] thresholded_px;
 	wire [2:0] fvh_thresh;
 	wire dv_thresh;
@@ -510,8 +511,19 @@ module zbt_6111_sample(beep, audio_reset_b,
 				.fvh_out(fvh_thresh),.dv_out(dv_thresh),
 				.din(blurred_px3),.dout(thresholded_px));
 	
+	// NTSC to ZBT
+	// used for testing preprocessing
+	// stores thresholded pixel stream into zbt0 for vga dislpay
+	// outputs ntsc_addr, ntsc_data, and ntsc_we (which will get assigned to zbt0 parameters)
+   wire [18:0] ntsc_addr;
+   wire [35:0] ntsc_data;
+   wire        ntsc_we;
+   ntsc_to_zbt n2z (clk, tv_in_line_clock1, fvh_thresh, dv_thresh, thresholded_px,
+		    ntsc_addr, ntsc_data, ntsc_we, 0);
 	
 	// Skeletonize
+	// goes through each line of pixels and outputs the midpoint of the laser line
+	// outputs current_row, midpoint, and asserts row_done at the end of a row
 	wire [10:0] current_row;
 	wire [10:0] midpoint;
 	wire row_done;
@@ -520,22 +532,19 @@ module zbt_6111_sample(beep, audio_reset_b,
 										.px_in(thresholded_px),.current_row(current_row),
 										.midpoint(midpoint),.row_done(row_done));
 
-	// NTSC to ZBT
-	// stores thresholded pixel stream into zbt0
-	// outputs ntsc_addr, ntsc_data, and ntsc_we (which will get assigned to zbt0 parameters)
-   wire [18:0] ntsc_addr;
-   wire [35:0] ntsc_data;
-   wire        ntsc_we;
-   ntsc_to_zbt n2z (clk, tv_in_line_clock1, fvh_thresh, dv_thresh, thresholded_px,
-		    ntsc_addr, ntsc_data, ntsc_we, 0);
-
 	// Write to ZBT
-	// manually writes values to zbt memory
+	// insert module here
+	
+	
+	// Manually write to ZBT
+	// Writes specified values to ZBT0
 	reg [4:0] manual_write_addr;
 	always @(posedge clk) manual_write_addr <= manual_write_addr+1;
 	wire [35:0] manual_write_data;
 	wire manual_we = switch[6]; // if 1, write directly into ZBT0, else use camera
 	manual_write_to_zbt w2z(.index(manual_write_addr[4:2]), .value(manual_write_data));
+	
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
 	// Virtual Camera
 	// simulate the monitor as a camera
