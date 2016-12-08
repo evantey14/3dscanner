@@ -531,11 +531,11 @@ module zbt_6111_sample(beep, audio_reset_b,
 
 	// Write to ZBT
 	// manually writes values to zbt memory
-	reg [3:0] write_addr;
+	reg [4:0] write_addr;
 	always @(posedge clk) write_addr <= write_addr+1;
 	wire [35:0] write_data;
 	wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
-	write_to_zbt w2z(.index(write_addr[3:2]), .value(write_data));
+	write_to_zbt w2z(.index(write_addr[4:2]), .value(write_data));
 	
 	// Virtual Camera
 	// simulate the monitor as a camera
@@ -557,8 +557,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 	wire [18:0] zbtc_read_addr; // address of data we want from ZBT0 (will be moved to 3D renderer or just changed to a counter)
 	wire [18:0] zbtc_write_addr; // ZBT1 address we're writing data to 
 	wire [35:0] zbtc_write_data; // pixel data we're writing into ZBT1
+	wire [7:0] px_out;
 	zbt_controller zbtc(clk, hcount, vcount, x, y, renderer_pixel,
-			zbtc_write_data, zbtc_write_addr);
+			zbtc_write_data, zbtc_write_addr, zbtc_read_addr, zbt1_read_data, px_out);
 	
    // VRAM
 	// reads line from ZBT1 and outputs separated vr_pixel values
@@ -598,7 +599,7 @@ module zbt_6111_sample(beep, audio_reset_b,
    assign 	zbt0_we = hcount[1:0] == 2'd2;//manual_write? (skeletonize_we && (hcount[1:0]==2'd2)) : hcount[1:0]==2'd2;
    assign 	zbt0_write_data = manual_write ? write_data : ntsc_data;
 
-	assign 	zbt1_addr = blackout ? blackout_addr : (zbt1_we ? zbtc_write_addr : vram_read_addr);
+	assign 	zbt1_addr = blackout ? blackout_addr : (zbt1_we ? zbtc_write_addr : (hcount[1:0]==2'd0 ? zbtc_read_addr : vram_read_addr));
 	assign 	zbt1_we = blackout ? blank : (hcount[1:0]==2'd2);
 	assign 	zbt1_write_data = blackout ? blackout_data : zbtc_write_data;
 
@@ -633,6 +634,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
    //always @(posedge clk)
      // dispdata <= {vram_read_data,9'b0,vram_addr};
+
     // dispdata <= camera_offset;
 	reg [2:0] last_fvh;
 	reg [10:0] counter;
@@ -645,4 +647,6 @@ module zbt_6111_sample(beep, audio_reset_b,
 		end
 		else counter <= counter + 1;
 	end
+
+
 endmodule

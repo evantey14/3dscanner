@@ -20,7 +20,8 @@
 //////////////////////////////////////////////////////////////////////////////////
 module zbt_controller(
     clk,hcount,vcount,x,y,pixel,
-	 zbtc_write_data,zbtc_write_addr
+	 zbtc_write_data,zbtc_write_addr,
+	 zbtc_read_addr,zbtc_read_data,px_out
     );
 	 input clk;
 	 input [10:0] hcount;
@@ -28,17 +29,31 @@ module zbt_controller(
 	 input [9:0] x;
 	 input [9:0] y;
 	 input [7:0] pixel;
-	 output reg [18:0] zbtc_write_addr;
-	 output reg [35:0] zbtc_write_data;
+	 output [18:0] zbtc_write_addr;
+	 output [35:0] zbtc_write_data;
+	 output [18:0] zbtc_read_addr;
+	 input [35:0] zbtc_read_data;
+	 output [7:0] px_out;
 	 
-	 reg [18:0] addr;
+	 wire [18:0] addr; 
+	 reg [18:0] old_addr;
 	 
-	 always @(posedge clk) begin
-		zbtc_write_addr <= (hcount[1:0]==2'd1) ? {y,x[9:2]} : addr;
-		zbtc_write_data <= {4'b0,pixel,pixel,pixel,pixel};
-	 end
-	 
-	 //assign zbtc_write_addr = addr;
+//	 always @(posedge clk) begin
+//		addr <= (hcount[1:0]==2'd3) ? {y,x[9:2]} : addr;
+//		//zbtc_write_data <= {4'b0,pixel,pixel,pixel,pixel};
+//		old_addr <= (hcount[1:0]==2'd3) ? addr : old_addr;
+//	 end
+	reg [7:0] old_pixel; 
+	wire [7:0] zbt_pixel = zbtc_read_data[7:0];
+	always @(posedge clk) begin
+		//zbt_pixel <= (hcount[1:0]==2'd2) ? zbtc_read_data[7:0] : zbt_pixel;
+		old_pixel <= (hcount[1:0]==2'd2) ? pixel : old_pixel;
+		old_addr <= (hcount[1:0]==2'd2) ? addr : old_addr;
+	end
+	 assign addr = {y,x[9:2]};
+	 assign zbtc_write_data = old_pixel>zbt_pixel? {4'b0,old_pixel,old_pixel,old_pixel,old_pixel} : {4'b0,zbt_pixel,zbt_pixel,zbt_pixel,zbt_pixel} ;
+	 assign zbtc_write_addr = old_addr;
+	 assign zbtc_read_addr = addr;
 	 //assign zbtc_write_data = pixel;//{4'b0,pixel,pixel,pixel,pixel};
 	 //assign zbtc_write_data = 36'hFFFF_FFFF_FF;
 endmodule
