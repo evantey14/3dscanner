@@ -59,7 +59,6 @@ module skeletonize(clk, reset, fvh_in, dv_in, px_in, current_row, midpoint, row_
 		if(new_line && first_row) first_row <= 0; 
 		
 		// Reinitialize all variables on each new line/frame
-		// Reinitialize all variables on each new line/frame
 		if (reset || new_frame || new_line) begin
 			max_length <= 0;
 			current_length <= 0;

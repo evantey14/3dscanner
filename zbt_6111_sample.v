@@ -519,19 +519,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 										.fvh_in(fvh_thresh),.dv_in(dv_thresh),
 										.px_in(thresholded_px),.current_row(current_row),
 										.midpoint(midpoint),.row_done(row_done));
-	reg skeletonize_we = 0;
-	reg [2:0] skeletonize_we_counter = 0;
-	always @(posedge clk) begin
-		if(row_done) begin 
-			skeletonize_we <= 1;
-			skeletonize_we_counter <= 0;
-		end
-		else if (skeletonize_we_counter == 3'hF) begin
-			skeletonize_we <= 0;
-		end
-		else skeletonize_we_counter <= skeletonize_we_counter + 1;
-	end
-	assign write_data = {6'b0,current_row,midpoint,10'b1111_1111_00};
+
 	// NTSC to ZBT
 	// stores thresholded pixel stream into zbt0
 	// outputs ntsc_addr, ntsc_data, and ntsc_we (which will get assigned to zbt0 parameters)
@@ -543,11 +531,11 @@ module zbt_6111_sample(beep, audio_reset_b,
 
 	// Write to ZBT
 	// manually writes values to zbt memory
-	reg [18:0] write_addr;
+	reg [3:0] write_addr;
 	always @(posedge clk) write_addr <= write_addr+1;
-	//wire [35:0] write_data;
+	wire [35:0] write_data;
 	wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
-	//write_to_zbt w2z(.index(write_addr[3:2]), .value(write_data));
+	write_to_zbt w2z(.index(write_addr[3:2]), .value(write_data));
 	
 	// Virtual Camera
 	// simulate the monitor as a camera
@@ -606,8 +594,8 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
 
 	// Set ZBT params
-   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr[18:2] : ntsc_addr) : (manual_write? renderer_read_addr[18:2] : vram_read_addr); 
-   assign 	zbt0_we = manual_write? (skeletonize_we && (hcount[1:0]==2'd2)) : hcount[1:0]==2'd2;
+   assign 	zbt0_addr = zbt0_we ? (manual_write? write_addr[3:2] : ntsc_addr) : (manual_write? renderer_read_addr[3:2] : vram_read_addr); 
+   assign 	zbt0_we = hcount[1:0] == 2'd2;//manual_write? (skeletonize_we && (hcount[1:0]==2'd2)) : hcount[1:0]==2'd2;
    assign 	zbt0_write_data = manual_write ? write_data : ntsc_data;
 
 	assign 	zbt1_addr = blackout ? blackout_addr : (zbt1_we ? zbtc_write_addr : vram_read_addr);
