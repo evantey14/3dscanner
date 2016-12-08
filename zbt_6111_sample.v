@@ -534,15 +534,17 @@ module zbt_6111_sample(beep, audio_reset_b,
 
 	// Write to ZBT
 	// insert module here
-	
+	wire [18:0] write_addr;
+	wire [35:0] write_data;
+	wire we = switch[5];
+	write_to_zbt w2z(write_addr, write_data);
 	
 	// Manually write to ZBT
 	// Writes specified values to ZBT0
-	reg [4:0] manual_write_addr;
-	always @(posedge clk) manual_write_addr <= manual_write_addr+1;
+	wire [18:0] manual_write_addr;
 	wire [35:0] manual_write_data;
 	wire manual_we = switch[6]; // if 1, write directly into ZBT0, else use camera
-	manual_write_to_zbt w2z(.index(manual_write_addr[4:2]), .value(manual_write_data));
+	manual_write_to_zbt mw2z(clk, manual_write_addr, manual_write_data);
 	
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
