@@ -31,7 +31,7 @@
 module rs232transmit(clk, reset, data, send, xmit_data, xmit_clk, start_send);
 
 // this section sets up the clk;
-    parameter DIVISOR =  234; // create 115,200 baud rate clock, not exact, but should work.
+    parameter DIVISOR =  560;//234; // create 115,200 baud rate clock, not exact, but should work.
 	 parameter MARK = 1'b1;
 	 parameter STOP_BIT = 1'b1;
 	 parameter START_BIT =1'b0;
@@ -58,7 +58,7 @@ module rs232transmit(clk, reset, data, send, xmit_data, xmit_clk, start_send);
     always @ (posedge clk)
     begin
     	count <= xmit_clk ? 0 : count+1;
-    	xmit_clk <= count == DIVISOR-2;
+    	xmit_clk <= count == DIVISOR-2; //558
 		
 		if (reset) 
 		  begin

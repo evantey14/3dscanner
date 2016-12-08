@@ -562,64 +562,80 @@ module zbt_6111_sample(beep, audio_reset_b,
 	reg frame_lock = 0;
 	reg old_frame_lock = 0;
 	always @(posedge clk) frame_lock <= reset ? 0 : (frame_lock==0 && save==1) ? 1 : frame_lock;
-	reg [18:0] rs232_addr = 0;
+	reg [10:0] rs232_addrh = 0;
+	reg [9:0] rs232_addrv = 0;
+	wire [18:0] rs232_addr = {1'b0, rs232_addrv, rs232_addrh[9:2]};
 	reg [7:0] rs_232_px;
 	reg [35:0] rs_232_data;
 	
 	
 	reg [1:0] px_state = 0;	
-	parameter S_READ = 0;
-	parameter S_SEND = 1;
-	reg read_state = S_READ;
+	parameter S_READ = 2'b0;
+	parameter S_DELAY = 2'b1;
+	parameter S_SEND = 2'b10;
+	reg [1:0] read_state = S_READ;
 	
 	reg send;
-	reg [11:0] counter;
+	reg [13:0] counter;
+	parameter max_count = 14'hFFFFF;
 	
-	always @(posedge clock_27mhz) begin
+	always @(posedge clk) begin
 		old_frame_lock <= frame_lock;
 		case (read_state)
 			S_READ:
 				begin
 					if (frame_lock) begin 
-						if (rs232_addr != 18'hFFFFF) begin
-							rs232_addr <= rs232_addr + 1;
-							read_state <= S_SEND;
+						//rs232_addr <= rs232_addr + 1;
+						if (rs232_addrv <= 767) begin
+							if (rs232_addrh >= 1020) begin
+								rs232_addrh <= 0;
+								rs232_addrv <= rs232_addrv + 1;
+							end
+							else begin
+								rs232_addrh <= rs232_addrh + 4;
+							end
+							read_state <= S_DELAY;
 							counter <= 0;
 						end
+					
 					end
+				end
+			S_DELAY:
+				begin
+					read_state <= S_SEND;
 				end
 			S_SEND:
 				begin
 					case (px_state) 
 						0: 
 							begin
-								rs_232_px <= zbt0_read_data[4*8-1-:8];
+								rs_232_px <= zbt0_read_data[7:0];
 								if (counter == 0) send <= 1;
-								else if (counter == 11'hFFFFF) px_state <= 1;
+								else if (counter == max_count) px_state <= 1;
 								else send <= 0;
 								counter <= counter + 1;
 							end
 						1:
 							begin
-								rs_232_px <= zbt0_read_data[3*8-1-:8];
+								rs_232_px <= zbt0_read_data[31:24];
 								if (counter == 0) send <= 1;
-								else if (counter == 11'hFFFFF) px_state <= 2;
+								else if (counter == max_count) px_state <= 2;
 								else send <= 0;
 								counter <= counter + 1;
 							end
 						2:
 							begin
-								rs_232_px <= zbt0_read_data[2*8-1-:8];
+								rs_232_px <= zbt0_read_data[23:16];
 								if (counter == 0) send <= 1;
-								else if (counter == 11'hFFFFF) px_state <= 3;
+								else if (counter == max_count) px_state <= 3;
 								else send <= 0;
 								counter <= counter + 1;
 							end
 						3:
 							begin
-								rs_232_px <= zbt0_read_data[1*8-1-:8];
+								rs_232_px <= zbt0_read_data[15:8];
 								if (counter == 0) send <= 1;
-								else if (counter == 11'hFFFFF) begin
+								else if (counter == max_count) begin
 									px_state <= 0;
 									read_state <= S_READ;
 								end
@@ -637,9 +653,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 		if (acounter == 0) send_test<=1;
 		else send_test <= 0;
 		acounter <= acounter + 1;
-		
 	end
-	rs232transmit sendx(clock_27mhz, 0, rs_232_px, send, rs232_txd, xmit_clk, start_send);
+	wire [7:0] test_px = (rs232_addrh>200 && rs232_addrh<300) ? 8'd48 : 8'd117;
+	rs232transmit sendx(clk, 0, rs_232_px, send, rs232_txd, xmit_clk, start_send);
 
 	// Set ZBT params
    assign 	zbt0_addr = frame_lock? rs232_addr : zbt0_we ? (manual_write? write_addr[3:2] : ntsc_addr) : (manual_write? renderer_read_addr[3:2] : vram_read_addr); 
