@@ -536,8 +536,12 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// insert module here
 	wire [18:0] write_addr;
 	wire [35:0] write_data;
+	wire [18:0] w2z_max_zbt_addr;
 	wire we = switch[5];
-	write_to_zbt w2z(write_addr, write_data);
+	write_to_zbt w2z(.clk(clk), .reset(reset), 
+							.point_ready_pulse(row_done), .x(midpoint), 
+							.y(current_row), .write_addr(write_addr),
+							.write_data(write_data), .max_zbt_addr(w2z_max_zbt_addr));
 	
 	// Manually write to ZBT
 	// Writes specified values to ZBT0
@@ -556,12 +560,15 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
-	wire [18:0] renderer_read_addr;
+	wire [20:0] renderer_read_addr;
 	wire [9:0] x;
 	wire [9:0] y;
 	wire [7:0] renderer_pixel;
+	wire [18:0] render_max_zbt_addr;
+	assign render_max_zbt_addr = we ? w2z_max_zbt_addr : manual_we ? 'd7 : 18'h3FFFF;
+
 	renderer rend(clk, hcount, vcount, camera_offset,
-			zbt0_read_data, renderer_read_addr, x, y, renderer_pixel);
+			zbt0_read_data, render_max_zbt_addr, renderer_read_addr, x, y, renderer_pixel);
 	
 	// ZBT Controller
 	// takes 2D monitor points, writes them to ZBT1
@@ -606,8 +613,8 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
 
 	// Set ZBT params
-   assign 	zbt0_addr = zbt0_we ? (we ? write_addr : manual_we? manual_write_addr[3:2] : ntsc_addr) : (we ? 5 : manual_we ? renderer_read_addr[3:2] : vram_read_addr); 
-   assign 	zbt0_we = hcount[1:0] == 2'd2;//manual_write? (skeletonize_we && (hcount[1:0]==2'd2)) : hcount[1:0]==2'd2;
+   assign 	zbt0_addr = zbt0_we ? (we ? write_addr : manual_we? manual_write_addr[3:2] : ntsc_addr) : (we ? renderer_read_addr[20:2] : manual_we ? renderer_read_addr[3:2] : vram_read_addr); 
+   assign 	zbt0_we = hcount[1:0] == 2'd2;//manual_write? (skeletonize_we && (hcount[1:0]==2'd2)) : hcount[1:0]==2'd2; 
    assign 	zbt0_write_data = we ? write_data : manual_we ? manual_write_data : ntsc_data;
 	
 	assign 	zbt1_addr = blackout ? blackout_addr : (zbt1_we ? zbtc_write_addr : (hcount[1:0]==2'd0 ? zbtc_read_addr : vram_read_addr));
@@ -641,23 +648,11 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    // debugging
    
-   assign led = ~{zbt1_addr[18:13],reset,switch[0]};
+	assign user1[31] = row_done;
+	assign user1[30] = clk;
 	
-   //always @(posedge clk)
-     // dispdata <= {vram_read_data,9'b0,vram_addr};
-
-    // dispdata <= camera_offset;
-	reg [2:0] last_fvh;
-	reg [10:0] counter;
-	assign new_line = ~last_fvh[0] && fvh[0];
-	always @(posedge tv_in_line_clock1) begin
-		last_fvh[2:0] <= fvh[2:0];
-		if(new_line) begin
-			dispdata <= counter;
-			counter <= 0;
-		end
-		else counter <= counter + 1;
+   assign led = ~{zbt1_addr[18:13],reset,switch[0]};
+	always @(posedge clk) begin
+		dispdata <= write_addr;
 	end
-
-
 endmodule

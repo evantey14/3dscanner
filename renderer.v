@@ -24,6 +24,7 @@ module renderer(
 		input [9:0] vcount,
 		input [5:0] camera_offset,
 		input [35:0] zbt0_read_data,
+		input [18:0] max_zbt_addr,
 		output[18:0] zbt0_read_addr,
 		output[9:0] x,
 		output [9:0] y,
@@ -31,9 +32,9 @@ module renderer(
     );
 		reg [35:0] data;
 		wire [9:0] z;
-		reg [4:0] addr;
+		reg [20:0] addr;
 		always @(posedge clk) begin
-			addr <= addr + 1;
+			addr <= (addr[20:2] <  max_zbt_addr) ? addr + 1 : 0;
 			data <= (hcount[1:0]==2'd1) ? zbt0_read_data : data;
 		end
 		assign zbt0_read_addr = addr;

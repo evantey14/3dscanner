@@ -23,6 +23,7 @@ module manual_write_to_zbt(
 	output reg [18:0] addr,
 	output reg [35:0] value
     );
+	
 	 parameter size = 8;
 	 always @(posedge clk) begin
 		if (addr >= size) addr <= 0;
