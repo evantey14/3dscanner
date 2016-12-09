@@ -546,7 +546,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// take in user input and convert to a virtual camera offset	
 	wire [10:0] x_offset, y_offset;
 	wire [8:0] angle;
-	virtual_camera vc(clk, left, right, up, down, rot_left, rot_right, x_offset, y_offset, angle);
+	virtual_camera vc(clk, reset, left, right, up, down, rot_left, rot_right, x_offset, y_offset, angle);
 
 	
 	
@@ -642,7 +642,7 @@ module zbt_6111_sample(beep, audio_reset_b,
    
    assign led = ~{zbt1_addr[18:13],reset,switch[0]};
 	
-   always @(posedge clk) dispdata <= angle;
+   always @(posedge clk) dispdata <= x_offset;
      // dispdata <= {vram_read_data,9'b0,vram_addr};
 //	reg [2:0] last_fvh;
 //	reg [10:0] counter;
