@@ -422,12 +422,14 @@ module zbt_6111_sample(beep, audio_reset_b,
    debounce db1(power_on_reset, clk, ~button_enter, user_reset);
    assign reset = user_reset | power_on_reset;
 	
-	// LEFT, RIGHT buttons for virtual camera
-	wire left, right, up, down;
+	// PAN and ROTATE buttons for virtual camera
+	wire left, right, up, down, rot_left, rot_right;
 	debounce db2(reset, clk, ~button_left, left);
 	debounce db3(reset, clk, ~button_right, right);
 	debounce db4(reset, clk, ~button_up, up);
 	debounce db5(reset, clk, ~button_down, down);
+	debounce db6(reset, clk, ~button1, rot_left);
+	debounce db7(reset, clk, ~button0, rot_right);
 
    // display module for debugging
 	
@@ -543,7 +545,10 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// simulate the monitor as a camera
 	// take in user input and convert to a virtual camera offset	
 	wire [10:0] x_offset, y_offset;
-	virtual_camera vc(clk, left, right, up, down, x_offset, y_offset);
+	wire [8:0] angle;
+	virtual_camera vc(clk, left, right, up, down, rot_left, rot_right, x_offset, y_offset, angle);
+
+	
 	
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
@@ -551,7 +556,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	wire [9:0] x;
 	wire [9:0] y;
 	wire [7:0] renderer_pixel;
-	renderer rend(clk, hcount, vcount, x_offset, y_offset,
+	renderer rend(clk, hcount, vcount, x_offset, y_offset, angle,
 			zbt0_read_data, renderer_read_addr, x, y, renderer_pixel);
 	
 	// ZBT Controller
@@ -576,11 +581,13 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// Run whenever camera offset changes
 	reg blackout_start; // signals the start of a blackout when camera offset changes
 	reg [10:0] old_x_offset, old_y_offset;
+	reg [8:0] old_angle;
 	always @(posedge clk) begin
-		if (old_x_offset != x_offset || old_y_offset != y_offset) blackout_start <= 1;
+		if (old_angle != angle || old_x_offset != x_offset || old_y_offset != y_offset) blackout_start <= 1;
 		else blackout_start <= 0;
 		old_x_offset <= x_offset;
 		old_y_offset <= y_offset;
+		old_angle <= angle;
 	end
 	reg blackout; // boolean controller for zbt param decision. 1 during a blackout
 	wire blackout_data = 0;
@@ -635,21 +642,19 @@ module zbt_6111_sample(beep, audio_reset_b,
    
    assign led = ~{zbt1_addr[18:13],reset,switch[0]};
 	
-   //always @(posedge clk)
+   always @(posedge clk) dispdata <= angle;
      // dispdata <= {vram_read_data,9'b0,vram_addr};
-
-    // dispdata <= camera_offset;
-	reg [2:0] last_fvh;
-	reg [10:0] counter;
-	assign new_line = ~last_fvh[0] && fvh[0];
-	always @(posedge tv_in_line_clock1) begin
-		last_fvh[2:0] <= fvh[2:0];
-		if(new_line) begin
-			dispdata <= counter;
-			counter <= 0;
-		end
-		else counter <= counter + 1;
-	end
+//	reg [2:0] last_fvh;
+//	reg [10:0] counter;
+//	assign new_line = ~last_fvh[0] && fvh[0];
+//	always @(posedge tv_in_line_clock1) begin
+//		last_fvh[2:0] <= fvh[2:0];
+//		if(new_line) begin
+//			dispdata <= counter;
+//			counter <= 0;
+//		end
+//		else counter <= counter + 1;
+//	end
 
 
 endmodule
