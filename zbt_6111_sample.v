@@ -418,9 +418,9 @@ module zbt_6111_sample(beep, audio_reset_b,
    defparam reset_sr.INIT = 16'hFFFF;
 
    // ENTER button is user reset
-   wire reset,user_reset, start;
+   wire reset,user_reset;
    debounce db1(power_on_reset, clk, ~button_enter, user_reset);
-	debounce db4(power_on_reset, clk, ~button3, start);
+	
    assign reset = user_reset | power_on_reset;
 	
 	// LEFT, RIGHT buttons for virtual camera
@@ -428,6 +428,10 @@ module zbt_6111_sample(beep, audio_reset_b,
 	debounce db2(reset, clk, ~button_left, left);
 	debounce db3(reset, clk, ~button_right, right);
 
+	// BUTTON 3 for frame capture
+	wire capture;
+	debounce db4(power_on_reset, clk, ~button3, capture);
+	
    // display module for debugging
 	
    reg [63:0] dispdata;
@@ -532,45 +536,25 @@ module zbt_6111_sample(beep, audio_reset_b,
 										.fvh_in(fvh_thresh),.dv_in(dv_thresh),
 										.px_in(thresholded_px),.current_row(current_row),
 										.midpoint(midpoint),.row_done(row_done));
-		reg latch;// = switch[4];
-	reg startcounting;
-	reg [35:0] counter;
-	reg old_start, waiting, old_vsync;
-	always @(posedge clk) begin
-		old_start <= start;
-		old_vsync <= vsync;
-		if (reset) startcounting <= 0;
-		if (~old_start && start) startcounting <= 1;
-		if (startcounting) begin
-			if (~old_vsync && vsync && waiting) begin
-				startcounting <= 0;
-				waiting <= 0;
-				latch <= 0;
-			end
-			else if (~old_vsync && vsync && ~waiting) begin 
-				startcounting <= 1;
-				counter <= 0;
-				waiting <= 1;
-				latch <= 1;
-			end
-			else if (waiting) counter <= counter + 1;
-		end
-	end
+	
+	// Save Frame
+	// When capture is pressed, assert latch for the entire next vsync cycle
+	// Latch should be anded into a later signal to allow data flow
+	wire latch;
+	save_frame save_frame(.clk(clk),.reset(reset),.capture(capture),
+									.vsync(vsync),.latch(latch));
+	
 
 	// Write to ZBT
 	// insert module here
 	wire we = switch[5];
-
-	wire [18:0] write_addr_raw;
-	wire [35:0] write_data_raw;
-	wire [18:0] w2z_max_zbt_addr_raw;
-	wire [18:0] write_addr = (latch) ? write_addr_raw : 0;
-	wire [35:0] write_data = (latch) ? write_data_raw : 0;
-	wire [18:0] w2z_max_zbt_addr = w2z_max_zbt_addr_raw;
+	wire [18:0] write_addr;
+	wire [35:0] write_data;
+	wire [18:0] w2z_max_zbt_addr;
 	write_to_zbt w2z(.clk(clk), .reset(reset), 
 							.point_ready_pulse(row_done & latch), .x(midpoint), 
-							.y(current_row), .write_addr(write_addr_raw),
-							.write_data(write_data_raw), .max_zbt_addr(w2z_max_zbt_addr_raw));
+							.y(current_row), .write_addr(write_addr),
+							.write_data(write_data), .max_zbt_addr(w2z_max_zbt_addr));
 	
 	// Manually write to ZBT
 	// Writes specified values to ZBT0
@@ -682,6 +666,6 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
    assign led = ~{zbt1_addr[18:13],reset,switch[0]};
 	always @(posedge clk) begin
-		dispdata <= {counter,3'b0,startcounting,1'b0,w2z_max_zbt_addr,2'b0,camera_offset};//,1'b0,write_addr
+		dispdata <= {1'b0,w2z_max_zbt_addr,2'b0,camera_offset};//,1'b0,write_addr
 	end
 endmodule

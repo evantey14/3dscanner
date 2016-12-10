@@ -37,9 +37,8 @@ module write_to_zbt(
 		if(reset) write_addr <= 0;
 		max_zbt_addr <= (write_addr > max_zbt_addr) ? write_addr : max_zbt_addr; 
 		if(point_ready_pulse && ~last_point_ready_pulse) begin
-			write_addr <= (write_addr < 'd50) ? write_addr + 1 : write_addr;
+			write_addr <= write_addr + 1;
 			write_data <= {6'b0,x,y,10'b1111_1111_00};
-			//point <= (write_addr < 'd50) ? point + 'd10 : point;
 		end
 	end
 endmodule
