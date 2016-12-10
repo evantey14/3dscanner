@@ -420,17 +420,22 @@ module zbt_6111_sample(beep, audio_reset_b,
    // ENTER button is user reset
    wire reset,user_reset;
    debounce db1(power_on_reset, clk, ~button_enter, user_reset);
+	
    assign reset = user_reset | power_on_reset;
 
 	// LEFT, RIGHT buttons for virtual camera
 	wire left, right;
 	debounce db2(reset, clk, ~button_left, left);
 	debounce db3(reset, clk, ~button_right, right);
-
-	// BUTTON0 for saving frames / sending to PC
+// BUTTON0 for saving frames / sending to PC
 	wire save;
 	debounce db4(reset, clk, ~button0, save);
 
+
+	// BUTTON 3 for frame capture
+	wire capture;
+	debounce db5(power_on_reset, clk, ~button3, capture);
+	
    // display module for debugging
 	
    reg [63:0] dispdata;
@@ -468,8 +473,8 @@ module zbt_6111_sample(beep, audio_reset_b,
 		       .tv_in_i2c_clock(tv_in_i2c_clock), 
 		       .tv_in_i2c_data(tv_in_i2c_data));
 
-   // ntsc data stream decoder
-	// takes tv_in_ycrcb and translates it to ycrcb, fvh, and dv
+   // NTSC data stream decoder
+	// takes tv_in_ycrcb and translates it to ycrcb, fvh, and dv per pixel
 	wire [29:0] ycrcb;	// video data (luminance, chrominance)
 	wire [2:0] fvh;	// sync for field, vertical, horizontal
    wire       dv;	// data valid
@@ -478,7 +483,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 		       .ycrcb(ycrcb), .f(fvh[2]),
 		       .v(fvh[1]), .h(fvh[0]), .data_valid(dv));
 	
-	// 5x5 Gaussian Blur
+	// Gaussian Blur
+	// Pass pixels through 3 Gaussian line blurs to decrease noise
+	
 	wire [2:0] fvh_blur;
 	wire dv_blur;
 	wire [7:0] blurred_px;
@@ -486,7 +493,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 										.fvh_in(fvh),.dv_in(dv),
 										.fvh_out(fvh_blur),.dv_out(dv_blur),
 										.px_in(ycrcb[29:22]),.blurred_px(blurred_px));
-										
+									
 	wire [2:0] fvh_blur2;
 	wire dv_blur2;
 	wire [7:0] blurred_px2;
@@ -503,10 +510,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 										.fvh_out(fvh_blur3),.dv_out(dv_blur3),
 										.px_in(blurred_px2),.blurred_px(blurred_px3));
 	
-	
-	
 	// Threshold
-	// also passes fvh and dv data with corresponding y data
+	// Floor / Ceiling pixel grayscale values to indicate lack / presence of laser line
+	// passes fvh and dv with the associated pixels (for display)
 	wire [7:0] thresholded_px;
 	wire [2:0] fvh_thresh;
 	wire dv_thresh;
@@ -514,8 +520,19 @@ module zbt_6111_sample(beep, audio_reset_b,
 				.fvh_out(fvh_thresh),.dv_out(dv_thresh),
 				.din(blurred_px3),.dout(thresholded_px));
 	
+	// NTSC to ZBT
+	// used for testing preprocessing
+	// stores thresholded pixel stream into zbt0 for vga dislpay
+	// outputs ntsc_addr, ntsc_data, and ntsc_we (which will get assigned to zbt0 parameters)
+   wire [18:0] ntsc_addr;
+   wire [35:0] ntsc_data;
+   wire        ntsc_we;
+   ntsc_to_zbt n2z (clk, tv_in_line_clock1, fvh_thresh, dv_thresh, thresholded_px,
+		    ntsc_addr, ntsc_data, ntsc_we, 0);
 	
 	// Skeletonize
+	// goes through each line of pixels and outputs the midpoint of the laser line
+	// outputs current_row, midpoint, and asserts row_done at the end of a row
 	wire [10:0] current_row;
 	wire [10:0] midpoint;
 	wire row_done;
@@ -523,23 +540,34 @@ module zbt_6111_sample(beep, audio_reset_b,
 										.fvh_in(fvh_thresh),.dv_in(dv_thresh),
 										.px_in(thresholded_px),.current_row(current_row),
 										.midpoint(midpoint),.row_done(row_done));
-
-	// NTSC to ZBT
-	// stores thresholded pixel stream into zbt0
-	// outputs ntsc_addr, ntsc_data, and ntsc_we (which will get assigned to zbt0 parameters)
-   wire [18:0] ntsc_addr;
-   wire [35:0] ntsc_data;
-   wire        ntsc_we;
-   ntsc_to_zbt n2z (clk, tv_in_line_clock1, fvh_thresh, dv_thresh, thresholded_px,
-		    ntsc_addr, ntsc_data, ntsc_we, 0);
+	
+	// Save Frame
+	// When capture is pressed, assert latch for the entire next vsync cycle
+	// Latch should be anded into a later signal to allow data flow
+	wire latch;
+	save_frame save_frame(.clk(clk),.reset(reset),.capture(capture),
+									.vsync(vsync),.latch(latch));
+	
 
 	// Write to ZBT
-	// manually writes values to zbt memory
-	reg [4:0] write_addr;
-	always @(posedge clk) write_addr <= write_addr+1;
+	// insert module here
+	wire we = switch[5];
+	wire [18:0] write_addr;
 	wire [35:0] write_data;
-	wire manual_write = switch[6]; // if 1, write directly into ZBT0, else use camera
-	write_to_zbt w2z(.index(write_addr[4:2]), .value(write_data));
+	wire [18:0] w2z_max_zbt_addr;
+	write_to_zbt w2z(.clk(clk), .reset(reset), 
+							.point_ready_pulse(row_done & latch), .x(midpoint), 
+							.y(current_row), .write_addr(write_addr),
+							.write_data(write_data), .max_zbt_addr(w2z_max_zbt_addr));
+	
+	// Manually write to ZBT
+	// Writes specified values to ZBT0
+	wire [18:0] manual_write_addr;
+	wire [35:0] manual_write_data;
+	wire manual_we = switch[6]; // if 1, write directly into ZBT0, else use camera
+	manual_write_to_zbt mw2z(clk, manual_write_addr, manual_write_data);
+	
+//////////////// ABOVE: storing into ZBT0 //////////////// BELOW: storing into ZBT1 ////////////////
 	
 	// Virtual Camera
 	// simulate the monitor as a camera
@@ -549,12 +577,15 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
-	wire [18:0] renderer_read_addr;
+	wire [20:0] renderer_read_addr;
 	wire [9:0] x;
 	wire [9:0] y;
 	wire [7:0] renderer_pixel;
+	wire [18:0] render_max_zbt_addr;
+	assign render_max_zbt_addr = we ? w2z_max_zbt_addr : manual_we ? 'd7 : 18'h3FFFF;
+
 	renderer rend(clk, hcount, vcount, camera_offset,
-			zbt0_read_data, renderer_read_addr, x, y, renderer_pixel);
+			zbt0_read_data, render_max_zbt_addr, renderer_read_addr, x, y, renderer_pixel);
 	
 	// ZBT Controller
 	// takes 2D monitor points, writes them to ZBT1
@@ -569,7 +600,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// reads line from ZBT1 and outputs separated vr_pixel values
    wire [7:0] 	vr_pixel;
    wire [18:0] 	vram_read_addr;
-	wire [35:0] 	vram_read_data = manual_write? zbt1_read_data: zbt0_read_data; // write from camera if not manual
+	wire [35:0] 	vram_read_data = we||manual_we? zbt1_read_data: zbt0_read_data; // write from camera if not manual
    vram_display vd1(reset,clk,hcount,vcount,vr_pixel,
 vram_read_addr, vram_read_data); 
 
@@ -698,10 +729,10 @@ vram_read_addr, vram_read_data);
 	rs232transmit sendx(clk, 0, rs_232_px, send, rs232_txd, xmit_clk, start_send);
 
 	// Set ZBT params
-   assign 	zbt0_addr = frame_lock? rs232_addr : zbt0_we ? (manual_write? write_addr[3:2] : ntsc_addr) : (manual_write? renderer_read_addr[3:2] : vram_read_addr); 
-   assign 	zbt0_we = frame_lock? 0 : (hcount[1:0]==2'd2); 
-   assign 	zbt0_write_data = manual_write ? write_data : ntsc_data;
-
+   assign 	zbt0_addr = frame_lock? rs232_addr : zbt0_we ? (we ? write_addr : manual_we? manual_write_addr[3:2] : ntsc_addr) : (we ? renderer_read_addr[20:2] : manual_we ? renderer_read_addr[3:2] : vram_read_addr); 
+   assign 	zbt0_we = frame_lock? 0 : hcount[1:0] == 2'd2;//manual_write? (skeletonize_we && (hcount[1:0]==2'd2)) : hcount[1:0]==2'd2; 
+   assign 	zbt0_write_data = we ? write_data : manual_we ? manual_write_data : ntsc_data;
+	
 	assign 	zbt1_addr = blackout ? blackout_addr : (zbt1_we ? zbtc_write_addr : (hcount[1:0]==2'd0 ? zbtc_read_addr : vram_read_addr));
 	assign 	zbt1_we = blackout ? blank : (hcount[1:0]==2'd2);
 	assign 	zbt1_write_data = blackout ? blackout_data : zbtc_write_data;
@@ -733,11 +764,11 @@ vram_read_addr, vram_read_data);
 
    // debugging
    
-   assign led = ~{zbt1_addr[18:13],reset,switch[0]};
+	assign user1[31] = row_done;
+	assign user1[30] = clk;
 	
-   always @(posedge clk)
-     // dispdata <= {vram_read_data,9'b0,vram_addr};
-    dispdata <= {read_state,2'b0,px_state,3'b0,frame_lock};
-
-
+  assign led = ~{zbt1_addr[18:13],reset,switch[0]};
+	always @(posedge clk) begin
+		dispdata <= {1'b0,w2z_max_zbt_addr,2'b0,camera_offset};//,1'b0,write_addr
+	end
 endmodule

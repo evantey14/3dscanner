@@ -3,7 +3,7 @@
 // Company: 
 // Engineer: 
 // 
-// Create Date:    17:42:00 11/27/2016 
+// Create Date:    22:48:07 12/07/2016 
 // Design Name: 
 // Module Name:    write_to_zbt 
 // Project Name: 
@@ -19,19 +19,26 @@
 //
 //////////////////////////////////////////////////////////////////////////////////
 module write_to_zbt(
-	input wire [2:0] index,
-	output reg [35:0] value
+		input wire clk,
+		input wire reset,
+		input wire point_ready_pulse,
+		input wire [10:0] x,
+		input wire [10:0] y,
+		output reg [18:0] write_addr,
+		output reg [35:0] write_data,
+		output reg [18:0] max_zbt_addr // largest ZBT address we've written to
     );
-	 always @(index)
-		case (index)
-			3'd0: value = {6'b0,10'd100,10'd100,10'b1111_1111_00};//36'b000000000000000000_0100101100_01001011; // 300, 300 
-			3'd1: value = {6'b0,10'd100,10'd100,10'b0011_1111_00};//36'b000000000000000000_1001011000_10010110; // 600, 600
-			3'd2: value = {6'b0,10'd200,10'd200,10'b1111_1111_00};//36'b000000000000000000_0111110100_01111101; // 500, 500
-			3'd3: value = {6'b0,10'd300,10'd300,10'b0011_1111_00};//36'b000000000000000000_0110010000_01100100; // 400, 400
-			3'd4: value = {6'b0,10'd400,10'd400,10'b1111_1111_00};//36'b000000000000000000_0100101100_01001011; // 300, 300 
-			3'd5: value = {6'b0,10'd500,10'd500,10'b0011_1111_00};//36'b000000000000000000_1001011000_10010110; // 600, 600
-			3'd6: value = {6'b0,10'd100,10'd100,10'b1111_1111_00};//36'b000000000000000000_0111110100_01111101; // 500, 500
-			3'd7: value = {6'b0,10'd200,10'd200,10'b0011_1111_00};//36'b000000000000000000_0110010000_01100100; // 400, 400
-			default: value = 0;
-		endcase
+	 
+	reg [10:0] point;
+	reg [2:0] counter;
+	reg last_point_ready_pulse;
+	always @(posedge clk) begin
+		last_point_ready_pulse <= point_ready_pulse;
+		if(reset) write_addr <= 0;
+		max_zbt_addr <= (write_addr > max_zbt_addr) ? write_addr : max_zbt_addr; 
+		if(point_ready_pulse && ~last_point_ready_pulse) begin
+			write_addr <= write_addr + 1;
+			write_data <= {6'b0,x,y,10'b1111_1111_00};
+		end
+	end
 endmodule
