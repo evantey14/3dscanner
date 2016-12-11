@@ -420,23 +420,26 @@ module zbt_6111_sample(beep, audio_reset_b,
    // ENTER button is user reset
    wire reset,user_reset;
    debounce db1(power_on_reset, clk, ~button_enter, user_reset);
-	
    assign reset = user_reset | power_on_reset;
 
-	// LEFT, RIGHT buttons for virtual camera
-	wire left, right;
+	// PAN and ROTATE buttons for virtual camera
+	wire left, right, up, down, rot_left, rot_right;
 	debounce db2(reset, clk, ~button_left, left);
 	debounce db3(reset, clk, ~button_right, right);
-// BUTTON0 for saving frames / sending to PC
-	wire save;
-	debounce db4(reset, clk, ~button0, save);
-
+	debounce db4(reset, clk, ~button_up, up);
+	debounce db5(reset, clk, ~button_down, down);
+	debounce db6(reset, clk, ~button1, rot_left);
+	debounce db7(reset, clk, ~button0, rot_right);
 
 	// BUTTON 3 for frame capture
 	wire capture;
-	debounce db5(power_on_reset, clk, ~button3, capture);
+	debounce db8(reset, clk, ~button3, capture);
 	
-   // display module for debugging
+	// BUTTON0 for saving frames / sending to PC
+	wire save;
+	debounce db9(reset, clk, ~button2, save);
+   
+	// display module for debugging
 	
    reg [63:0] dispdata;
    display_16hex hexdisp1(reset, clk, dispdata,
@@ -548,10 +551,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 	save_frame save_frame(.clk(clk),.reset(reset),.capture(capture),
 									.vsync(vsync),.latch(latch));
 	
-
 	// Write to ZBT
 	// insert module here
-	wire we = switch[5];
+	wire we = switch[6];
 	wire [18:0] write_addr;
 	wire [35:0] write_data;
 	wire [18:0] w2z_max_zbt_addr;
@@ -562,19 +564,21 @@ module zbt_6111_sample(beep, audio_reset_b,
 	
 	// Manually write to ZBT
 	// Writes specified values to ZBT0
-	wire [18:0] manual_write_addr;
+	wire [20:0] manual_write_addr;
 	wire [35:0] manual_write_data;
-	wire manual_we = switch[6]; // if 1, write directly into ZBT0, else use camera
-	manual_write_to_zbt mw2z(clk, manual_write_addr, manual_write_data);
+	wire [18:0] size = 30;
+	wire manual_we = switch[7]; // if 1, write directly into ZBT0, else use camera
+	manual_write_to_zbt mw2z(clk, size, manual_write_addr, manual_write_data);
 	
 //////////////// ABOVE: storing into ZBT0 //////////////// BELOW: storing into ZBT1 ////////////////
 	
 	// Virtual Camera
 	// simulate the monitor as a camera
 	// take in user input and convert to a virtual camera offset	
-	wire [5:0] camera_offset;
-	virtual_camera vc(clk, left, right, camera_offset);
-	
+	wire [10:0] x_offset, y_offset;
+	wire [8:0] angle;
+	virtual_camera vc(clk, reset, left, right, up, down, rot_left, rot_right, x_offset, y_offset, angle);
+
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
 	wire [20:0] renderer_read_addr;
@@ -582,9 +586,8 @@ module zbt_6111_sample(beep, audio_reset_b,
 	wire [9:0] y;
 	wire [7:0] renderer_pixel;
 	wire [18:0] render_max_zbt_addr;
-	assign render_max_zbt_addr = we ? w2z_max_zbt_addr : manual_we ? 'd7 : 18'h3FFFF;
-
-	renderer rend(clk, hcount, vcount, camera_offset,
+	assign render_max_zbt_addr = we ? w2z_max_zbt_addr : manual_we ? 'd30 : 18'h3FFFF;
+	renderer rend(clk, hcount, vcount, x_offset, y_offset, angle,
 			zbt0_read_data, render_max_zbt_addr, renderer_read_addr, x, y, renderer_pixel);
 	
 	// ZBT Controller
@@ -601,18 +604,20 @@ module zbt_6111_sample(beep, audio_reset_b,
    wire [7:0] 	vr_pixel;
    wire [18:0] 	vram_read_addr;
 	wire [35:0] 	vram_read_data = we||manual_we? zbt1_read_data: zbt0_read_data; // write from camera if not manual
-   vram_display vd1(reset,clk,hcount,vcount,vr_pixel,
-vram_read_addr, vram_read_data); 
+   vram_display vd1(reset,clk,hcount,vcount,vr_pixel,vram_read_addr, vram_read_data); 
 
 	// Blackout
 	// Set all ZBT1 values to 0
 	// Run whenever camera offset changes
 	reg blackout_start; // signals the start of a blackout when camera offset changes
-	reg [5:0] old_camera_offset;
+	reg [10:0] old_x_offset, old_y_offset;
+	reg [8:0] old_angle;
 	always @(posedge clk) begin
-		if (old_camera_offset != camera_offset) blackout_start <= 1;
+		if (old_angle != angle || old_x_offset != x_offset || old_y_offset != y_offset) blackout_start <= 1;
 		else blackout_start <= 0;
-		old_camera_offset <= camera_offset;
+		old_x_offset <= x_offset;
+		old_y_offset <= y_offset;
+		old_angle <= angle;
 	end
 	reg blackout; // boolean controller for zbt param decision. 1 during a blackout
 	wire blackout_data = 0;
@@ -715,8 +720,7 @@ vram_read_addr, vram_read_data);
 							end
 					endcase
 				end
-		endcase
-		
+		endcase	
 	end
 	reg send_test = 0;
 	reg [11:0] acounter = 0;
@@ -729,7 +733,7 @@ vram_read_addr, vram_read_data);
 	rs232transmit sendx(clk, 0, rs_232_px, send, rs232_txd, xmit_clk, start_send);
 
 	// Set ZBT params
-   assign 	zbt0_addr = frame_lock? rs232_addr : zbt0_we ? (we ? write_addr : manual_we? manual_write_addr[3:2] : ntsc_addr) : (we ? renderer_read_addr[20:2] : manual_we ? renderer_read_addr[3:2] : vram_read_addr); 
+   assign 	zbt0_addr = frame_lock? rs232_addr : zbt0_we ? (we ? write_addr : manual_we? manual_write_addr[20:2] : ntsc_addr) : (we ? renderer_read_addr[20:2] : manual_we ? renderer_read_addr[20:2] : vram_read_addr); 
    assign 	zbt0_we = frame_lock? 0 : hcount[1:0] == 2'd2;//manual_write? (skeletonize_we && (hcount[1:0]==2'd2)) : hcount[1:0]==2'd2; 
    assign 	zbt0_write_data = we ? write_data : manual_we ? manual_write_data : ntsc_data;
 	
@@ -766,9 +770,10 @@ vram_read_addr, vram_read_data);
    
 	assign user1[31] = row_done;
 	assign user1[30] = clk;
-	
+
   assign led = ~{zbt1_addr[18:13],reset,switch[0]};
 	always @(posedge clk) begin
-		dispdata <= {1'b0,w2z_max_zbt_addr,2'b0,camera_offset};//,1'b0,write_addr
+		dispdata <= {angle,1'b0,y_offset,1'b0,x_offset};//,1'b0,write_addr
 	end
+
 endmodule

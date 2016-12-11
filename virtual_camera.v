@@ -20,16 +20,20 @@
 //////////////////////////////////////////////////////////////////////////////////
 module virtual_camera(
     input clk,
+	 input reset,
     input left,
     input right,
-    output reg [5:0] camera_offset
+	 input up,
+	 input down,
+	 input rot_left,
+	 input rot_right,
+    output [10:0] x_offset,
+	 output [10:0] y_offset,
+	 output [8:0] angle
     );
-	initial camera_offset = 0;
-	reg old_left, old_right;
-	always @(posedge clk) begin
-			if (old_left == 0 && left == 1) camera_offset <= camera_offset + 63;
-			if (old_right == 0 && right == 1) camera_offset <= camera_offset + 1;
-			old_left <= left;
-			old_right <= right;
-	end
+	reg [24:0] counter = 0;
+	// incrementer (clock, reset, inc, dec, step, init, max_value, value);
+	incrementer inc1(clk,reset,right,left,5,0,1000,x_offset);
+	incrementer inc2(clk,reset,down,up,5,0,1000,y_offset);
+	incrementer inc3(clk,reset,rot_left,rot_right,5,0,355,angle);
 endmodule
