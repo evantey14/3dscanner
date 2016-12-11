@@ -519,7 +519,9 @@ module zbt_6111_sample(beep, audio_reset_b,
 	wire [7:0] thresholded_px;
 	wire [2:0] fvh_thresh;
 	wire dv_thresh;
-	threshold threshold (.clk(tv_in_line_clock1),.fvh_in(fvh_blur3),.dv_in(dv_blur3),
+	wire [7:0] thresholdv;
+	incrementer inc1(clk,reset,up&switch[5],down&switch[5],5,63,255,thresholdv);
+	threshold threshold (.clk(tv_in_line_clock1),.thresholdv(thresholdv),.fvh_in(fvh_blur3),.dv_in(dv_blur3),
 				.fvh_out(fvh_thresh),.dv_out(dv_thresh),
 				.din(blurred_px3),.dout(thresholded_px));
 	
@@ -577,7 +579,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// take in user input and convert to a virtual camera offset	
 	wire [10:0] x_offset, y_offset;
 	wire [8:0] angle;
-	virtual_camera vc(clk, reset, left, right, up, down, rot_left, rot_right, x_offset, y_offset, angle);
+	virtual_camera vc(clk, reset, left, right, (up&~switch[5]), (down&~switch[5]), rot_left, rot_right, x_offset, y_offset, angle);
 
 	// 3D Renderer
 	// takes 3D points from ZBT0 and transform them into the monitor
@@ -773,7 +775,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 
   assign led = ~{zbt1_addr[18:13],reset,switch[0]};
 	always @(posedge clk) begin
-		dispdata <= {angle,1'b0,y_offset,1'b0,x_offset};//,1'b0,write_addr
+		dispdata <= {thresholdv,3'b0,angle,1'b0,y_offset,1'b0,x_offset};//,1'b0,write_addr
 	end
 
 endmodule

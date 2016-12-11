@@ -22,8 +22,9 @@
 // temporary thresholding module
 // if data in < 127, set to 0, if > 127, set to 255
 // pass field, vertical, horizontal, and data_valid values associated with the pixel
-module threshold(clk, fvh_in, dv_in, fvh_out, dv_out, din, dout);
+module threshold(clk, thresholdv, fvh_in, dv_in, fvh_out, dv_out, din, dout);
 	input clk;
+	input [7:0] thresholdv;
 	input [2:0] fvh_in;
 	input dv_in;
 	output reg [2:0] fvh_out;
@@ -31,7 +32,7 @@ module threshold(clk, fvh_in, dv_in, fvh_out, dv_out, din, dout);
 	input [7:0] din; 
 	output reg [7:0] dout; 
 	always @(posedge clk) begin
-		dout <= (din > 8'b0011_1111) ? 8'b1111_1111 : 8'b0000_0000;
+		dout <= (din > thresholdv) ? 8'b1111_1111 : 8'b0000_0000;
 		fvh_out <= fvh_in;
 		dv_out <= dv_in;
 	end
