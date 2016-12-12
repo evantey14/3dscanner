@@ -28,9 +28,9 @@ module gaussian_line_blur(
     input [7:0] px_in,
     output [7:0] blurred_px
     );
-	parameter FILTER_SIZE = 11;
+	parameter FILTER_SIZE = 13;
 	parameter PX_DELAY = 6;
-	parameter [6*FILTER_SIZE-1:0] COEFFS = {6'd23,6'd23,6'd23,6'd23,6'd23,6'd23,6'd23,6'd23,6'd23,6'd23,6'd23};
+	parameter [6*FILTER_SIZE-1:0] COEFFS = {6'd19,6'd19,6'd19,6'd19,6'd19,6'd19,6'd19,6'd19,6'd19,6'd19,6'd19,6'd19,6'd19};
 	
 	reg [7:0] window [0:FILTER_SIZE-1];
 	reg [2:0] fvh_buffer [0:PX_DELAY-1];
