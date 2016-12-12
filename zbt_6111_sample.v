@@ -520,7 +520,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	wire [2:0] fvh_thresh;
 	wire dv_thresh;
 	wire [7:0] thresholdv;
-	incrementer inc1(clk,reset,up&switch[5],down&switch[5],5,63,255,thresholdv);
+	incrementer inc1(clk,reset,up&switch[5],down&switch[5],2,63,255,thresholdv);
 	threshold threshold (.clk(tv_in_line_clock1),.thresholdv(thresholdv),.fvh_in(fvh_blur3),.dv_in(dv_blur3),
 				.fvh_out(fvh_thresh),.dv_out(dv_thresh),
 				.din(blurred_px3),.dout(thresholded_px));
