@@ -28,16 +28,16 @@ module divider_tb;
 	reg clk;
 	reg sign;
 	reg start;
-	reg [7:0] dividend;
-	reg [7:0] divider;
+	reg [35:0] dividend;
+	reg [35:0] divider;
 
 	// Outputs
-	wire [7:0] quotient;
-	wire [7:0] remainder;
+	wire [35:0] quotient;
+	wire [35:0] remainder;
 	wire ready;
 
 	// Instantiate the Unit Under Test (UUT)
-	divider uut (
+	divider #(.WIDTH(36)) uut(
 		.clk(clk), 
 		.sign(sign), 
 		.start(start), 
@@ -61,9 +61,20 @@ module divider_tb;
 		#100;
         
 		// -10/2 = -5
-		dividend = -8'shA;
-		divider = 8'sh2;
-		start = 1; 
+//		dividend = -8'shA;
+//		divider = 8'sh2;
+//		start = 1;
+//		#10 start = 0;
+//		// -15/5 = -3
+//		#90
+//		dividend = -8'shF;
+//		divider = 8'sh5;
+//		start = 1;
+//		#10 start = 0;
+		dividend = -36'sh14850560;
+		divider = 36'shFFFFFFEE2;
+		start = 1;
+		#10 start = 0;
 	end
       
 endmodule

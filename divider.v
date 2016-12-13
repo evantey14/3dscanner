@@ -27,7 +27,7 @@
 // It uses a simple restoring divide algorithm.
 // http://en.wikipedia.org/wiki/Division_(digital)#Restoring_division
 
-module divider #(parameter WIDTH = 8) 
+module divider #(parameter WIDTH = 36) 
   (input clk, sign, start,
    input [WIDTH-1:0] dividend, 
    input [WIDTH-1:0] divider,
@@ -49,9 +49,12 @@ module divider #(parameter WIDTH = 8)
    wire [WIDTH-2:0] zeros = 0;
    initial bit = 0;
    initial negative_output = 0;
+	reg last_start;
+	wire start_edge = ~last_start && start;
    always @( posedge clk ) begin
+		last_start <= start;
       del_ready <= !bit;
-      if( start ) begin
+      if( start_edge ) begin
 
          bit = WIDTH;
          quotient = 0;

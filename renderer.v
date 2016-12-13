@@ -33,7 +33,7 @@ module renderer(
 		output [7:0] pixel
     );
 		reg [35:0] data;
-		wire [9:0] z;
+		wire [10:0] z;
 		reg [20:0] addr;
 		wire signed [7:0] sin, cos;
 		trigLUT lut(angle, sin, cos);
@@ -43,11 +43,12 @@ module renderer(
 		end
 		assign zbt0_read_addr = addr;
 		wire signed [9:0] raw_x = data[29:20];
+		wire signed [9:0] raw_y = data[19:10];
 		wire signed [9:0] raw_z = data[9:0];
-		wire signed [17:0] inter_x = cos*raw_x + sin*raw_z;
-		wire signed [17:0] inter_z = sin*raw_x - cos*raw_z;
+		wire signed [17:0] inter_x = cos*(raw_x) + sin*(raw_z);
+		wire signed [17:0] inter_z = sin*(raw_x) - cos*(raw_z);
 		assign x = inter_x[17:6] + {x_offset,3'b000};
-		assign y = data[19:10] + {y_offset, 3'b000};
+		assign y = (raw_y << 1) + {y_offset, 3'b000};
 		assign z = (inter_z[17:6]+350);
 		assign pixel = z[9:2];
 endmodule

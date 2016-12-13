@@ -520,7 +520,7 @@ module zbt_6111_sample(beep, audio_reset_b,
 	wire [2:0] fvh_thresh;
 	wire dv_thresh;
 	wire [7:0] thresholdv;
-	incrementer inc1(clk,reset,up&switch[5],down&switch[5],2,63,255,thresholdv);
+	incrementer inc1(clk,reset,up&switch[5],down&switch[5],2,50,255,thresholdv);
 	threshold threshold (.clk(tv_in_line_clock1),.thresholdv(thresholdv),.fvh_in(fvh_blur3),.dv_in(dv_blur3),
 				.fvh_out(fvh_thresh),.dv_out(dv_thresh),
 				.din(blurred_px3),.dout(thresholded_px));
@@ -538,13 +538,46 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// Skeletonize
 	// goes through each line of pixels and outputs the midpoint of the laser line
 	// outputs current_row, midpoint, and asserts row_done at the end of a row
-	wire [10:0] current_row;
-	wire [10:0] midpoint;
+	wire [9:0] current_row;
+	wire [9:0] midpoint;
 	wire row_done;
+	wire first_row;
 	skeletonize skeletonize (.clk(tv_in_line_clock1),.reset(reset),
 										.fvh_in(fvh_thresh),.dv_in(dv_thresh),
 										.px_in(thresholded_px),.current_row(current_row),
-										.midpoint(midpoint),.row_done(row_done));
+										.midpoint(midpoint),.row_done(row_done), .first_row(first_row));
+
+//DEBUGGING
+//reg [10:0] last_current_row, last_midpoint;
+//	reg [6:0] skel_counter;
+//	reg [10:0] skel_max;
+//	reg row_change, midpoint_change;
+//	wire row_change_wire = last_current_row != current_row;
+//	always @(posedge clk) begin
+//		last_current_row <= current_row;
+//		last_midpoint <= midpoint;
+//		if (last_current_row != current_row) begin
+//			skel_counter <= skel_counter+1;
+//			row_change <= 1;
+//		end
+//		else row_change <= 0;
+//		if (last_midpoint != midpoint) begin
+//			midpoint_change <= 1;
+//		end
+//		else midpoint_change <= 0;
+//	end
+
+
+	// Depth Reconstruction
+	wire [12:0] depth_x, depth_y, depth_z;
+	wire pt_done;
+	wire [35:0] outval;
+	wire div_d, div_s;
+	
+	depth_reconstruction depth_reconstruction(.clk(clk),
+										.px_x(500),.px_y(500),
+										.worldpt1(depth_x),.worldpt2(depth_y),
+										.worldpt3(depth_z),.pt_done(pt_done));
 	
 	// Save Frame
 	// When capture is pressed, assert latch for the entire next vsync cycle
@@ -557,12 +590,13 @@ module zbt_6111_sample(beep, audio_reset_b,
 	// insert module here
 	wire we = switch[6];
 	wire [18:0] write_addr;
-	wire [35:0] write_data;
+	wire [35:0] write_data_raw;
+	wire [35:0] write_data = write_data_raw & {36{latch}};
 	wire [18:0] w2z_max_zbt_addr;
 	write_to_zbt w2z(.clk(clk), .reset(reset), 
-							.point_ready_pulse(row_done & latch), .x(midpoint), 
-							.y(current_row), .write_addr(write_addr),
-							.write_data(write_data), .max_zbt_addr(w2z_max_zbt_addr));
+							.point_ready_pulse(row_done & latch), .x(depth_y), 
+							.y(depth_x), .write_addr(write_addr),
+							.write_data(write_data_raw), .max_zbt_addr(w2z_max_zbt_addr));
 	
 	// Manually write to ZBT
 	// Writes specified values to ZBT0
@@ -770,12 +804,12 @@ module zbt_6111_sample(beep, audio_reset_b,
 
    // debugging
    
-	assign user1[31] = row_done;
-	assign user1[30] = clk;
+	//assign user1[31] = row_done;
+	assign user3[31] = clk;
 
   assign led = ~{zbt1_addr[18:13],reset,switch[0]};
-	always @(posedge clk) begin
-		dispdata <= {thresholdv,3'b0,angle,1'b0,y_offset,1'b0,x_offset};//,1'b0,write_addr
-	end
+//	always @(posedge clk) begin
+//		dispdata <= {thresholdv,3'b0,angle,1'b0,y_offset,1'b0,x_offset,2'b0,w2z_max_zbt_addr};//,1'b0,write_addr
+//	end
 
 endmodule

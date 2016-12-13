@@ -22,10 +22,10 @@ module write_to_zbt(
 		input wire clk,
 		input wire reset,
 		input wire point_ready_pulse,
-		input wire [10:0] x,
-		input wire [10:0] y,
+		input wire [9:0] x,
+		input wire [9:0] y,
 		output reg [18:0] write_addr,
-		output reg [35:0] write_data,
+		output [35:0] write_data,
 		output reg [18:0] max_zbt_addr // largest ZBT address we've written to
     );
 	 
@@ -38,7 +38,8 @@ module write_to_zbt(
 		max_zbt_addr <= (write_addr > max_zbt_addr) ? write_addr : max_zbt_addr; 
 		if(point_ready_pulse && ~last_point_ready_pulse) begin
 			write_addr <= write_addr + 1;
-			write_data <= {6'b0,x,y,10'b1111_1111_00};
+			//write_data <= {6'b0,x,y,10'b1111_1111_00};
 		end
 	end
+	assign write_data = {6'b0,x,y,10'b1111_1111_00};
 endmodule
